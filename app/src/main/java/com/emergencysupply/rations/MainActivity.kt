@@ -35,16 +35,28 @@ class MainActivity : ComponentActivity() {
             val signInLauncher = rememberLauncherForActivityResult(
                 contract = ActivityResultContracts.StartActivityForResult()
             ) { result ->
-                if (result.resultCode == Activity.RESULT_OK) {
+                if (result.data != null) {
                     val task = GoogleSignIn.getSignedInAccountFromIntent(result.data)
                     try {
                         val account = task.getResult(ApiException::class.java)
                         app.googleAuthManager.handleSignInResult(account)
+                        viewModel.setSignInError(null)
                         Toast.makeText(this, "Signed in as ${account.email}", Toast.LENGTH_SHORT).show()
                     } catch (e: ApiException) {
-                        Log.e("MainActivity", "Google sign-in failed: ${e.statusCode}", e)
-                        Toast.makeText(this, "Sign-in error: ${e.statusCode}", Toast.LENGTH_LONG).show()
+                        Log.e("MainActivity", "Google sign-in failed: ${e.statusCode} (${e.statusMessage})", e)
+                        val errorDetail = when (e.statusCode) {
+                            10 -> "Developer Error (10): Release SHA-1 is not registered in Google Cloud Console OAuth Client ID."
+                            12500 -> "Sign-in Failed (12500): Google rejected sign-in. Check SHA-1 & OAuth consent screen."
+                            7 -> "Network Error (7): Could not contact Google auth servers. Check internet."
+                            12501 -> "Sign-in Canceled (12501): Account selection was dismissed."
+                            12502 -> "Sign-in In Progress (12502)."
+                            else -> "Sign-in error: code ${e.statusCode} (${e.statusMessage ?: e.message})"
+                        }
+                        viewModel.setSignInError(errorDetail)
+                        Toast.makeText(this, errorDetail, Toast.LENGTH_LONG).show()
                     }
+                } else {
+                    viewModel.setSignInError("Sign-in canceled: No account data returned.")
                 }
             }
 

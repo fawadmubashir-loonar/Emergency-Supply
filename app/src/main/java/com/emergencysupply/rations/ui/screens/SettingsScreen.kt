@@ -1,6 +1,7 @@
 package com.emergencysupply.rations.ui.screens
 
 import android.app.Activity
+import android.widget.Toast
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -22,6 +23,7 @@ import androidx.compose.material.icons.filled.AccountCircle
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.CloudDone
 import androidx.compose.material.icons.filled.CloudSync
+import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.ErrorOutline
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Lock
@@ -35,6 +37,7 @@ import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Divider
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
@@ -46,7 +49,9 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -75,6 +80,8 @@ fun SettingsScreen(
     val syncState by viewModel.syncState.collectAsState()
     val updateStatus by viewModel.updateStatus.collectAsState()
     val recentHistory by viewModel.recentHistory.collectAsState()
+    val signInError by viewModel.signInError.collectAsState()
+    val clipboardManager = LocalClipboardManager.current
 
     LazyColumn(
         modifier = Modifier
@@ -157,6 +164,35 @@ fun SettingsScreen(
                             fontSize = 12.sp,
                             color = Color.DarkGray
                         )
+
+                        if (!signInError.isNullOrBlank()) {
+                            Spacer(modifier = Modifier.height(10.dp))
+                            Surface(
+                                shape = RoundedCornerShape(8.dp),
+                                color = DangerRed.copy(alpha = 0.1f),
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(10.dp),
+                                    verticalAlignment = Alignment.Top
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.ErrorOutline,
+                                        contentDescription = null,
+                                        tint = DangerRed,
+                                        modifier = Modifier.size(18.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Text(
+                                        text = signInError ?: "",
+                                        fontSize = 11.sp,
+                                        color = DangerRed,
+                                        fontWeight = FontWeight.Medium
+                                    )
+                                }
+                            }
+                        }
+
                         Spacer(modifier = Modifier.height(12.dp))
                         Button(
                             onClick = onSignInClick,
@@ -167,6 +203,74 @@ fun SettingsScreen(
                             Icon(imageVector = Icons.Default.Lock, contentDescription = null, modifier = Modifier.size(18.dp))
                             Spacer(modifier = Modifier.width(8.dp))
                             Text("Sign In with Google")
+                        }
+
+                        Spacer(modifier = Modifier.height(14.dp))
+                        Divider(color = Color(0xFFF1F5F9))
+                        Spacer(modifier = Modifier.height(12.dp))
+
+                        // SHA-1 Helper Box for Google Cloud Console
+                        Text(
+                            text = "⚙️ One-Time Google Cloud OAuth Setup",
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = MidnightSlate
+                        )
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text(
+                            text = "Google Play Services requires registering your release SHA-1 certificate in Google Cloud Console under an Android OAuth 2.0 Client ID:",
+                            fontSize = 11.sp,
+                            color = Color.Gray
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+
+                        // Package Name row
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .background(Color(0xFFF8FAFC), RoundedCornerShape(8.dp))
+                                .padding(horizontal = 10.dp, vertical = 6.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Column {
+                                Text("Package Name", fontSize = 10.sp, color = Color.Gray)
+                                Text("com.emergencysupply.rations", fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = DarkSlate)
+                            }
+                            IconButton(onClick = {
+                                clipboardManager.setText(AnnotatedString("com.emergencysupply.rations"))
+                                Toast.makeText(context, "Package name copied!", Toast.LENGTH_SHORT).show()
+                            }) {
+                                Icon(Icons.Default.ContentCopy, contentDescription = "Copy", modifier = Modifier.size(16.dp), tint = TealPrimary)
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(6.dp))
+
+                        // SHA-1 Fingerprint row
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .background(Color(0xFFF8FAFC), RoundedCornerShape(8.dp))
+                                .padding(horizontal = 10.dp, vertical = 6.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text("Release SHA-1 Certificate", fontSize = 10.sp, color = Color.Gray)
+                                Text(
+                                    "4D:C5:68:1B:B8:7A:2F:77:AF:83:FD:BB:3C:7C:90:BF:60:A1:1F:6E",
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = DarkSlate
+                                )
+                            }
+                            IconButton(onClick = {
+                                clipboardManager.setText(AnnotatedString("4D:C5:68:1B:B8:7A:2F:77:AF:83:FD:BB:3C:7C:90:BF:60:A1:1F:6E"))
+                                Toast.makeText(context, "SHA-1 copied to clipboard!", Toast.LENGTH_SHORT).show()
+                            }) {
+                                Icon(Icons.Default.ContentCopy, contentDescription = "Copy", modifier = Modifier.size(16.dp), tint = TealPrimary)
+                            }
                         }
                     }
                 }

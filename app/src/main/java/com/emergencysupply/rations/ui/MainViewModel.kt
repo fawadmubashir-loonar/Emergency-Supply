@@ -49,6 +49,11 @@ class MainViewModel(
     val syncState: StateFlow<SyncState> = repository.syncState
     val updateStatus: StateFlow<UpdateStatus> = updater.status
     val currentAccount: StateFlow<GoogleSignInAccount?> = authManager.currentAccount
+    val signInError = MutableStateFlow<String?>(null)
+
+    fun setSignInError(error: String?) {
+        signInError.value = error
+    }
 
     val allInventory = repository.allInventory.stateIn(
         viewModelScope,
