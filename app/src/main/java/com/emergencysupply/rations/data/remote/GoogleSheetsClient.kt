@@ -7,11 +7,13 @@ import com.emergencysupply.rations.data.local.entity.GroceryItem
 import com.emergencysupply.rations.data.local.entity.HistoryLogEntry
 import com.emergencysupply.rations.data.local.entity.InventoryItem
 import com.google.android.gms.auth.api.signin.GoogleSignInAccount
-import com.google.api.client.http.javanet.NetHttpTransport
 import com.google.api.client.googleapis.extensions.android.gms.auth.GoogleAccountCredential
+import com.google.api.client.http.javanet.NetHttpTransport
 import com.google.api.client.json.gson.GsonFactory
 import com.google.api.services.sheets.v4.Sheets
 import com.google.api.services.sheets.v4.SheetsScopes
+import com.google.api.services.sheets.v4.model.BatchUpdateValuesRequest
+import com.google.api.services.sheets.v4.model.ClearValuesRequest
 import com.google.api.services.sheets.v4.model.ValueRange
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -94,6 +96,104 @@ class GoogleSheetsClient(private val context: Context) {
             )
         }
         items
+    }
+
+    suspend fun upsertInventoryItem(account: GoogleSignInAccount, item: InventoryItem) = withContext(Dispatchers.IO) {
+        val service = getSheetsService(account)
+        val response: ValueRange = service.spreadsheets().values()
+            .get(spreadsheetId, "'Master Inventory'!A2:S")
+            .setValueRenderOption("FORMULA")
+            .execute()
+
+        val rows = response.getValues() ?: emptyList()
+        val index = rows.indexOfFirst { it.getOrNull(0)?.toString()?.trim() == item.id }
+
+        if (index != -1) {
+            val rowNum = index + 2
+            val existingRow = rows[index]
+            val colI = existingRow.getOrNull(8)?.toString()?.trim() ?: ""
+            val isFormula = colI.startsWith("=")
+
+            if (isFormula) {
+                val batchData = listOf(
+                    ValueRange().setRange("'Master Inventory'!C$rowNum:H$rowNum").setValues(
+                        listOf(listOf<Any>(item.category, item.unit, item.location, item.initialQty, item.stockIn, item.stockOut))
+                    ),
+                    ValueRange().setRange("'Master Inventory'!J$rowNum").setValues(
+                        listOf(listOf<Any>(item.parLevel))
+                    ),
+                    ValueRange().setRange("'Master Inventory'!L$rowNum").setValues(
+                        listOf(listOf<Any>(item.earliestExpiry ?: ""))
+                    ),
+                    ValueRange().setRange("'Master Inventory'!P$rowNum").setValues(
+                        listOf(listOf<Any>(item.servingsPerUnit))
+                    ),
+                    ValueRange().setRange("'Master Inventory'!R$rowNum:S$rowNum").setValues(
+                        listOf(listOf<Any>(item.notes, item.lastUpdated))
+                    )
+                )
+                val batchRequest = BatchUpdateValuesRequest()
+                    .setValueInputOption("USER_ENTERED")
+                    .setData(batchData)
+                service.spreadsheets().values()
+                    .batchUpdate(spreadsheetId, batchRequest)
+                    .execute()
+            } else {
+                val fullRow = listOf<Any>(
+                    item.id,
+                    item.name,
+                    item.category,
+                    item.unit,
+                    item.location,
+                    item.initialQty,
+                    item.stockIn,
+                    item.stockOut,
+                    item.currentQty,
+                    item.parLevel,
+                    item.restockNeeded,
+                    item.earliestExpiry ?: "",
+                    item.daysUntilExpiry ?: "",
+                    item.expirationStatus,
+                    item.stockStatus,
+                    item.servingsPerUnit,
+                    item.totalServings,
+                    item.notes,
+                    item.lastUpdated
+                )
+                val body = ValueRange().setValues(listOf(fullRow))
+                service.spreadsheets().values()
+                    .update(spreadsheetId, "'Master Inventory'!A$rowNum:S$rowNum", body)
+                    .setValueInputOption("USER_ENTERED")
+                    .execute()
+            }
+        } else {
+            val fullRow = listOf<Any>(
+                item.id,
+                item.name,
+                item.category,
+                item.unit,
+                item.location,
+                item.initialQty,
+                item.stockIn,
+                item.stockOut,
+                item.currentQty,
+                item.parLevel,
+                item.restockNeeded,
+                item.earliestExpiry ?: "",
+                item.daysUntilExpiry ?: "",
+                item.expirationStatus,
+                item.stockStatus,
+                item.servingsPerUnit,
+                item.totalServings,
+                item.notes,
+                item.lastUpdated
+            )
+            val body = ValueRange().setValues(listOf(fullRow))
+            service.spreadsheets().values()
+                .append(spreadsheetId, "'Master Inventory'!A:S", body)
+                .setValueInputOption("USER_ENTERED")
+                .execute()
+        }
     }
 
     suspend fun fetchGroceries(account: GoogleSignInAccount): List<GroceryItem> = withContext(Dispatchers.IO) {
@@ -269,6 +369,12 @@ class GoogleSheetsClient(private val context: Context) {
 
     suspend fun rewriteGroceriesTab(account: GoogleSignInAccount, items: List<GroceryItem>) = withContext(Dispatchers.IO) {
         val service = getSheetsService(account)
+        try {
+            service.spreadsheets().values()
+                .clear(spreadsheetId, "'Groceries'!A2:J", ClearValuesRequest())
+                .execute()
+        } catch (_: Exception) {}
+
         val rows = mutableListOf<List<Any>>()
         // Header
         rows.add(listOf("ID", "Name", "Qty", "Unit", "Aisle", "Store", "Checked", "Favorite", "Added By", "Updated At"))

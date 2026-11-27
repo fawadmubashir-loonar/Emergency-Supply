@@ -15,6 +15,8 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -37,6 +39,8 @@ class RationsRepository(
     private val settingsDao = database.settingsDao()
     private val syncDao = database.syncDao()
 
+    private val syncMutex = Mutex()
+
     private val _syncState = MutableStateFlow<SyncState>(SyncState.Idle)
     val syncState: StateFlow<SyncState> = _syncState.asStateFlow()
 
@@ -53,8 +57,21 @@ class RationsRepository(
         val item = inventoryDao.getItemById(itemId) ?: return
         val newQty = (item.currentQty - delta).coerceAtLeast(0.0)
         val now = dateFormat.format(Date())
+        val stockOut = item.stockOut + delta
+        val restockNeeded = maxOf(0.0, item.parLevel - newQty)
+        val stockStatus = if (newQty < item.parLevel) "LOW" else "OK"
+        val totalServings = newQty * item.servingsPerUnit
 
-        inventoryDao.applyUseItem(itemId, newQty, delta, now)
+        val updatedItem = item.copy(
+            currentQty = newQty,
+            stockOut = stockOut,
+            restockNeeded = restockNeeded,
+            stockStatus = stockStatus,
+            totalServings = totalServings,
+            lastUpdated = now,
+            syncPending = true
+        )
+        inventoryDao.updateItem(updatedItem)
 
         val historyEntry = HistoryLogEntry(
             timestamp = now,
@@ -87,8 +104,21 @@ class RationsRepository(
         val item = inventoryDao.getItemById(itemId) ?: return
         val newQty = item.currentQty + delta
         val now = dateFormat.format(Date())
+        val stockIn = item.stockIn + delta
+        val restockNeeded = maxOf(0.0, item.parLevel - newQty)
+        val stockStatus = if (newQty < item.parLevel) "LOW" else "OK"
+        val totalServings = newQty * item.servingsPerUnit
 
-        inventoryDao.applyRestockItem(itemId, newQty, delta, now)
+        val updatedItem = item.copy(
+            currentQty = newQty,
+            stockIn = stockIn,
+            restockNeeded = restockNeeded,
+            stockStatus = stockStatus,
+            totalServings = totalServings,
+            lastUpdated = now,
+            syncPending = true
+        )
+        inventoryDao.updateItem(updatedItem)
 
         val historyEntry = HistoryLogEntry(
             timestamp = now,
@@ -119,22 +149,39 @@ class RationsRepository(
 
     suspend fun addInventoryItem(item: InventoryItem, actor: String, account: GoogleSignInAccount?) {
         val now = dateFormat.format(Date())
-        val newItem = item.copy(lastUpdated = now, syncPending = true)
+        val restockNeeded = maxOf(0.0, item.parLevel - item.currentQty)
+        val stockStatus = if (item.currentQty < item.parLevel) "LOW" else "OK"
+        val totalServings = item.currentQty * item.servingsPerUnit
+        val newItem = item.copy(
+            restockNeeded = restockNeeded,
+            stockStatus = stockStatus,
+            totalServings = totalServings,
+            lastUpdated = now,
+            syncPending = true
+        )
         inventoryDao.insertItem(newItem)
 
         val historyEntry = HistoryLogEntry(
             timestamp = now,
             action = "ADD",
-            category = item.category,
-            itemName = item.name,
-            change = item.currentQty,
-            newStock = item.currentQty,
-            unit = item.unit,
-            expirationDate = item.earliestExpiry,
+            category = newItem.category,
+            itemName = newItem.name,
+            change = newItem.currentQty,
+            newStock = newItem.currentQty,
+            unit = newItem.unit,
+            expirationDate = newItem.earliestExpiry,
             notes = "Added new item by $actor (Android)",
             syncPending = true
         )
         historyDao.insert(historyEntry)
+
+        syncDao.insertAction(
+            PendingSyncAction(
+                actionType = "ADD_ITEM",
+                targetId = newItem.id,
+                payloadJson = "{\"name\": \"${newItem.name}\"}"
+            )
+        )
 
         if (account != null) {
             triggerBackgroundSync(account)
@@ -152,6 +199,7 @@ class RationsRepository(
     ) {
         val now = dateFormat.format(Date())
         val existing = groceryDao.findUncheckedByName(name)
+        val targetId: String
         if (existing != null) {
             val updated = existing.copy(
                 qty = existing.qty + qty,
@@ -159,6 +207,7 @@ class RationsRepository(
                 syncPending = true
             )
             groceryDao.insertOrUpdate(updated)
+            targetId = existing.id
         } else {
             val newItem = GroceryItem(
                 id = "groc-${System.currentTimeMillis()}-${(100..999).random()}",
@@ -174,7 +223,16 @@ class RationsRepository(
                 syncPending = true
             )
             groceryDao.insertOrUpdate(newItem)
+            targetId = newItem.id
         }
+
+        syncDao.insertAction(
+            PendingSyncAction(
+                actionType = "ADD_GROCERY",
+                targetId = targetId,
+                payloadJson = "{\"name\": \"$name\", \"qty\": $qty}"
+            )
+        )
 
         if (account != null) {
             triggerBackgroundSync(account)
@@ -184,6 +242,13 @@ class RationsRepository(
     suspend fun toggleGroceryChecked(id: String, checked: Boolean, account: GoogleSignInAccount?) {
         val now = dateFormat.format(Date())
         groceryDao.toggleChecked(id, checked, now)
+        syncDao.insertAction(
+            PendingSyncAction(
+                actionType = "TOGGLE_GROCERY",
+                targetId = id,
+                payloadJson = "{\"checked\": $checked}"
+            )
+        )
         if (account != null) {
             triggerBackgroundSync(account)
         }
@@ -192,6 +257,13 @@ class RationsRepository(
     suspend fun toggleGroceryFavorite(id: String, favorite: Boolean, account: GoogleSignInAccount?) {
         val now = dateFormat.format(Date())
         groceryDao.toggleFavorite(id, favorite, now)
+        syncDao.insertAction(
+            PendingSyncAction(
+                actionType = "TOGGLE_GROCERY",
+                targetId = id,
+                payloadJson = "{\"favorite\": $favorite}"
+            )
+        )
         if (account != null) {
             triggerBackgroundSync(account)
         }
@@ -199,6 +271,13 @@ class RationsRepository(
 
     suspend fun deleteGrocery(id: String, account: GoogleSignInAccount?) {
         groceryDao.deleteById(id)
+        syncDao.insertAction(
+            PendingSyncAction(
+                actionType = "DELETE_GROCERY",
+                targetId = id,
+                payloadJson = "{}"
+            )
+        )
         if (account != null) {
             triggerBackgroundSync(account)
         }
@@ -206,48 +285,99 @@ class RationsRepository(
 
     suspend fun clearCheckedGroceries(account: GoogleSignInAccount?) {
         groceryDao.clearChecked()
+        syncDao.insertAction(
+            PendingSyncAction(
+                actionType = "CLEAR_GROCERIES",
+                targetId = "all_checked",
+                payloadJson = "{}"
+            )
+        )
         if (account != null) {
             triggerBackgroundSync(account)
         }
     }
 
     suspend fun syncWithGoogleSheets(account: GoogleSignInAccount) {
-        _syncState.value = SyncState.Syncing
-        try {
-            // 1. Fetch remote sheet data
-            val remoteInventory = sheetsClient.fetchMasterInventory(account)
-            val remoteGroceries = sheetsClient.fetchGroceries(account)
-            val remoteHistory = sheetsClient.fetchHistoryLog(account)
-            val remoteSettings = sheetsClient.fetchSettings(account)
+        syncMutex.withLock {
+            _syncState.value = SyncState.Syncing
+            try {
+                // 1. Process pending local actions first
+                val pendingActions = syncDao.getAllPendingActions()
+                if (pendingActions.isNotEmpty()) {
+                    // Grocery actions
+                    val groceryActionTypes = setOf("ADD_GROCERY", "TOGGLE_GROCERY", "DELETE_GROCERY", "CLEAR_GROCERIES")
+                    val groceryActions = pendingActions.filter { it.actionType in groceryActionTypes }
+                    if (groceryActions.isNotEmpty()) {
+                        val localGroceries = groceryDao.getAllGroceriesOnce()
+                        sheetsClient.rewriteGroceriesTab(account, localGroceries)
+                        for (item in localGroceries) {
+                            if (item.syncPending) {
+                                groceryDao.update(item.copy(syncPending = false))
+                            }
+                        }
+                        for (action in groceryActions) {
+                            syncDao.deleteAction(action.id)
+                        }
+                    }
 
-            // 2. Persist into Room
-            if (remoteInventory.isNotEmpty()) {
-                inventoryDao.insertAll(remoteInventory)
-            }
-            if (remoteGroceries.isNotEmpty()) {
-                groceryDao.insertAll(remoteGroceries)
-            }
-            if (remoteHistory.isNotEmpty()) {
-                historyDao.insertAll(remoteHistory)
-            }
-            settingsDao.saveSettings(remoteSettings)
+                    // Inventory actions
+                    val inventoryActionTypes = setOf("USE_ITEM", "RESTOCK_ITEM", "ADD_ITEM", "UPDATE_ITEM")
+                    val inventoryActions = pendingActions.filter { it.actionType in inventoryActionTypes }
+                    for (action in inventoryActions) {
+                        val item = inventoryDao.getItemById(action.targetId)
+                        if (item != null) {
+                            sheetsClient.upsertInventoryItem(account, item)
+                            inventoryDao.updateItem(item.copy(syncPending = false))
+                        }
+                        // Also push any unsynced history entries
+                        val pendingHistory = historyDao.getPendingEntries()
+                        for (entry in pendingHistory) {
+                            sheetsClient.appendHistoryEntry(account, entry)
+                            historyDao.markSynced(entry.id)
+                        }
+                        syncDao.deleteAction(action.id)
+                    }
+                }
 
-            // 3. Flush any pending local actions (e.g. offline edits)
-            val pendingActions = syncDao.getAllPendingActions()
-            for (action in pendingActions) {
-                syncDao.deleteAction(action.id)
-            }
+                // Push any remaining unsynced history entries if any
+                val remainingHistory = historyDao.getPendingEntries()
+                for (entry in remainingHistory) {
+                    sheetsClient.appendHistoryEntry(account, entry)
+                    historyDao.markSynced(entry.id)
+                }
 
-            _syncState.value = SyncState.Success("Synced with Google Sheet", System.currentTimeMillis())
-        } catch (e: Exception) {
-            _syncState.value = SyncState.Error(e.message ?: "Sync failed. Working in offline mode.")
+                // 2. Fetch remote data and persist into Room cleanly
+                // Only overwrite groceries/inventory when pending actions have been flushed cleanly!
+                val remainingPending = syncDao.getPendingCount()
+                if (remainingPending == 0) {
+                    val remoteInventory = sheetsClient.fetchMasterInventory(account)
+                    val remoteGroceries = sheetsClient.fetchGroceries(account)
+                    val remoteHistory = sheetsClient.fetchHistoryLog(account)
+                    val remoteSettings = sheetsClient.fetchSettings(account)
+
+                    if (remoteInventory.isNotEmpty()) {
+                        inventoryDao.insertAll(remoteInventory)
+                    }
+                    groceryDao.clearAll()
+                    if (remoteGroceries.isNotEmpty()) {
+                        groceryDao.insertAll(remoteGroceries)
+                    }
+                    if (remoteHistory.isNotEmpty()) {
+                        historyDao.insertAll(remoteHistory)
+                    }
+                    settingsDao.saveSettings(remoteSettings)
+                }
+
+                _syncState.value = SyncState.Success("Synced with Google Sheet", System.currentTimeMillis())
+            } catch (e: Exception) {
+                _syncState.value = SyncState.Error(e.message ?: "Sync failed. Working in offline mode.")
+            }
         }
     }
 
     private fun triggerBackgroundSync(account: GoogleSignInAccount) {
         externalScope.launch(Dispatchers.IO) {
             try {
-                // Background sync
                 val pending = syncDao.getAllPendingActions()
                 if (pending.isNotEmpty()) {
                     syncWithGoogleSheets(account)

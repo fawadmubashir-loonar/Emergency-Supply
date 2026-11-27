@@ -13,6 +13,9 @@ interface GroceryDao {
     @Query("SELECT * FROM groceries ORDER BY checked ASC, store ASC, name ASC")
     fun getAllGroceries(): Flow<List<GroceryItem>>
 
+    @Query("SELECT * FROM groceries ORDER BY checked ASC, store ASC, name ASC")
+    suspend fun getAllGroceriesOnce(): List<GroceryItem>
+
     @Query("SELECT * FROM groceries WHERE checked = 0 ORDER BY store ASC, name ASC")
     fun getUncheckedGroceries(): Flow<List<GroceryItem>>
 

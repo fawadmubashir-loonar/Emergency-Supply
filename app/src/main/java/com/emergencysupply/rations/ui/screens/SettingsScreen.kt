@@ -57,6 +57,7 @@ import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.emergencysupply.rations.BuildConfig
 import com.emergencysupply.rations.data.local.entity.HistoryLogEntry
 import com.emergencysupply.rations.data.repository.SyncState
 import com.emergencysupply.rations.ui.MainViewModel
@@ -392,7 +393,7 @@ fun SettingsScreen(
                             border = BorderStroke(1.dp, TealPrimary.copy(alpha = 0.3f))
                         ) {
                             Text(
-                                text = "v1.0.3",
+                                text = "v${BuildConfig.VERSION_NAME}",
                                 fontSize = 11.sp,
                                 fontWeight = FontWeight.Bold,
                                 color = TealPrimary,
@@ -467,7 +468,7 @@ fun SettingsScreen(
                         }
                         is UpdateStatus.UpToDate -> {
                             Text(
-                                text = "App is running the latest release (v1.0.3)",
+                                text = "App is running the latest release (v${BuildConfig.VERSION_NAME})",
                                 fontSize = 12.sp,
                                 color = SuccessGreen,
                                 fontWeight = FontWeight.SemiBold

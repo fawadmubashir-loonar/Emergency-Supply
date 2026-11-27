@@ -264,7 +264,7 @@ fun InventoryScreen(viewModel: MainViewModel) {
                     modifier = Modifier.fillMaxSize(),
                     verticalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
-                    items(items, key = { it.id }) { item ->
+                    items(items, key = { "inv_${it.id}" }) { item ->
                         ReformedInventoryCard(
                             item = item,
                             onUse = { viewModel.useItem(item.id, 1.0) },
@@ -384,7 +384,8 @@ fun ReformedInventoryCard(
                     }
 
                     // Visual Progress Bar towards Par
-                    val progressRatio = if (item.parLevel > 0) (item.currentQty / item.parLevel).toFloat().coerceIn(0f, 1f) else 1f
+                    val rawProgressRatio = if (item.parLevel > 0) (item.currentQty / item.parLevel).toFloat() else 1f
+                    val progressRatio = if (rawProgressRatio.isNaN() || rawProgressRatio.isInfinite()) 0f else rawProgressRatio.coerceIn(0f, 1f)
                     val progressColor = if (item.isLowStock) WarningAmber else SuccessGreen
                     LinearProgressIndicator(
                         progress = { progressRatio },

@@ -12,6 +12,12 @@ interface HistoryDao {
     @Query("SELECT * FROM history_log ORDER BY id DESC LIMIT :limit")
     fun getRecentHistory(limit: Int = 50): Flow<List<HistoryLogEntry>>
 
+    @Query("SELECT * FROM history_log WHERE syncPending = 1 ORDER BY id ASC")
+    suspend fun getPendingEntries(): List<HistoryLogEntry>
+
+    @Query("UPDATE history_log SET syncPending = 0 WHERE id = :id")
+    suspend fun markSynced(id: Long)
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insert(entry: HistoryLogEntry)
 

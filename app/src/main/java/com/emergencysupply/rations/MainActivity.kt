@@ -1,6 +1,7 @@
 package com.emergencysupply.rations
 
 import android.app.Activity
+import android.os.Build
 import android.os.Bundle
 import android.util.Log
 import android.widget.Toast
@@ -13,6 +14,7 @@ import com.emergencysupply.rations.ui.MainScreen
 import com.emergencysupply.rations.ui.MainViewModel
 import com.emergencysupply.rations.ui.MainViewModelFactory
 import com.emergencysupply.rations.ui.theme.EmergencySupplyTheme
+import com.emergencysupply.rations.updater.UpdateStatus
 import com.google.android.gms.auth.api.signin.GoogleSignIn
 import com.google.android.gms.common.api.ApiException
 
@@ -30,9 +32,18 @@ class MainActivity : ComponentActivity() {
 
     override fun onResume() {
         super.onResume()
-        val currentStatus = app.updater.status.value
-        if (currentStatus is com.emergencysupply.rations.updater.UpdateStatus.ReadyToInstall) {
-            app.updater.launchInstaller(this, currentStatus.apkFile)
+        try {
+            val currentStatus = app.updater.status.value
+            if (currentStatus is UpdateStatus.ReadyToInstall) {
+                if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O || packageManager.canRequestPackageInstalls()) {
+                    app.updater.launchInstaller(this, currentStatus.apkFile)
+                } else {
+                    app.updater.dismissUpdate()
+                }
+            }
+        } catch (e: Exception) {
+            Log.e("MainActivity", "Error handling ReadyToInstall onResume", e)
+            app.updater.dismissUpdate()
         }
     }
 

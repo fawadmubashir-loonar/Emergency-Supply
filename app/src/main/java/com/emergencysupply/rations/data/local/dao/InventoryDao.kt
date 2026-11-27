@@ -31,11 +31,27 @@ interface InventoryDao {
     @Update
     suspend fun updateItem(item: InventoryItem)
 
-    @Query("UPDATE master_inventory SET currentQty = :newQty, stockOut = stockOut + :usedDelta, lastUpdated = :timestamp, syncPending = 1 WHERE id = :itemId")
-    suspend fun applyUseItem(itemId: String, newQty: Double, usedDelta: Double, timestamp: String)
+    @Query("UPDATE master_inventory SET currentQty = :newQty, stockOut = stockOut + :usedDelta, restockNeeded = :restockNeeded, stockStatus = :stockStatus, totalServings = :totalServings, lastUpdated = :timestamp, syncPending = 1 WHERE id = :itemId")
+    suspend fun applyUseItem(
+        itemId: String,
+        newQty: Double,
+        usedDelta: Double,
+        restockNeeded: Double,
+        stockStatus: String,
+        totalServings: Double,
+        timestamp: String
+    )
 
-    @Query("UPDATE master_inventory SET currentQty = :newQty, stockIn = stockIn + :addedDelta, lastUpdated = :timestamp, syncPending = 1 WHERE id = :itemId")
-    suspend fun applyRestockItem(itemId: String, newQty: Double, addedDelta: Double, timestamp: String)
+    @Query("UPDATE master_inventory SET currentQty = :newQty, stockIn = stockIn + :addedDelta, restockNeeded = :restockNeeded, stockStatus = :stockStatus, totalServings = :totalServings, lastUpdated = :timestamp, syncPending = 1 WHERE id = :itemId")
+    suspend fun applyRestockItem(
+        itemId: String,
+        newQty: Double,
+        addedDelta: Double,
+        restockNeeded: Double,
+        stockStatus: String,
+        totalServings: Double,
+        timestamp: String
+    )
 
     @Query("DELETE FROM master_inventory")
     suspend fun clearAll()

@@ -1,5 +1,6 @@
 package com.emergencysupply.rations.ui.screens
 
+import android.widget.Toast
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -46,6 +47,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -145,7 +147,8 @@ fun DashboardScreen(viewModel: MainViewModel) {
                     Spacer(modifier = Modifier.height(14.dp))
 
                     // Progress toward 90-day readiness goal
-                    val supplyProgress = (metrics.estDaysOfSupply.toFloat() / 90f).coerceIn(0f, 1f)
+                    val rawSupplyProgress = (metrics.estDaysOfSupply.toFloat() / 90f)
+                    val supplyProgress = if (rawSupplyProgress.isNaN() || rawSupplyProgress.isInfinite()) 0f else rawSupplyProgress.coerceIn(0f, 1f)
                     LinearProgressIndicator(
                         progress = { supplyProgress },
                         modifier = Modifier
@@ -286,7 +289,7 @@ fun DashboardScreen(viewModel: MainViewModel) {
                 }
             }
         } else {
-            items(expiringItems, key = { it.id }) { item ->
+            items(expiringItems, key = { "fifo_${it.id}" }) { item ->
                 ReformedFifoCard(item = item, onUseOne = { viewModel.useItem(item.id, 1.0) })
             }
         }
@@ -358,7 +361,7 @@ fun DashboardScreen(viewModel: MainViewModel) {
                 }
             }
         } else {
-            items(restockItems, key = { it.id }) { item ->
+            items(restockItems, key = { "restock_${it.id}" }) { item ->
                 ReformedRestockCard(
                     item = item,
                     onAddToGroceries = { viewModel.addRestockItemToGroceries(item) }
@@ -498,6 +501,7 @@ fun ReformedFifoCard(item: InventoryItem, onUseOne: () -> Unit) {
 
 @Composable
 fun ReformedRestockCard(item: InventoryItem, onAddToGroceries: () -> Unit) {
+    val context = LocalContext.current
     val deficit = if (item.parLevel > item.currentQty) (item.parLevel - item.currentQty) else 1.0
 
     Card(
@@ -538,7 +542,8 @@ fun ReformedRestockCard(item: InventoryItem, onAddToGroceries: () -> Unit) {
             Spacer(modifier = Modifier.height(8.dp))
 
             // Stock Bar
-            val parProgress = if (item.parLevel > 0) (item.currentQty / item.parLevel).toFloat().coerceIn(0f, 1f) else 0f
+            val rawParProgress = if (item.parLevel > 0) (item.currentQty / item.parLevel).toFloat() else 0f
+            val parProgress = if (rawParProgress.isNaN() || rawParProgress.isInfinite()) 0f else rawParProgress.coerceIn(0f, 1f)
             LinearProgressIndicator(
                 progress = { parProgress },
                 modifier = Modifier
@@ -563,7 +568,10 @@ fun ReformedRestockCard(item: InventoryItem, onAddToGroceries: () -> Unit) {
                 )
 
                 Button(
-                    onClick = onAddToGroceries,
+                    onClick = {
+                        onAddToGroceries()
+                        Toast.makeText(context, "Added ${item.name} to Groceries", Toast.LENGTH_SHORT).show()
+                    },
                     shape = RoundedCornerShape(8.dp),
                     colors = ButtonDefaults.buttonColors(containerColor = TealPrimary),
                     modifier = Modifier.height(34.dp)

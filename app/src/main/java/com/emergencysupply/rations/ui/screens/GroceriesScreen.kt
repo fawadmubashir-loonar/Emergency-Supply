@@ -352,7 +352,7 @@ fun GroceriesScreen(viewModel: MainViewModel) {
                     }
                 }
 
-                items(itemsInStore, key = { it.id }) { item ->
+                items(itemsInStore, key = { "groc_${store}_${it.id}" }) { item ->
                     ReformedGroceryItemCard(
                         item = item,
                         onToggleChecked = { viewModel.toggleGroceryChecked(item.id, !item.checked) },
