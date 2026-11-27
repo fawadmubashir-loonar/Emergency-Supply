@@ -4,6 +4,7 @@ import android.app.Activity
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
+import com.emergencysupply.rations.data.PreplannedCatalog
 import com.emergencysupply.rations.data.auth.GoogleAuthManager
 import com.emergencysupply.rations.data.local.entity.AppSettingsEntity
 import com.emergencysupply.rations.data.local.entity.GroceryItem
@@ -95,14 +96,49 @@ class MainViewModel(
     val searchQuery = MutableStateFlow("")
     val categoryFilter = MutableStateFlow("All")
     val locationFilter = MutableStateFlow("All")
+    val lowStockOnlyFilter = MutableStateFlow(false)
+    val expiringOnlyFilter = MutableStateFlow(false)
     val groceryStoreFilter = MutableStateFlow("All Stores")
+
+    private val customCategories = MutableStateFlow<List<String>>(emptyList())
+    private val customLocations = MutableStateFlow<List<String>>(emptyList())
+
+    val availableCategories: StateFlow<List<String>> = combine(
+        allInventory,
+        customCategories
+    ) { items, custom ->
+        val seen = LinkedHashMap<String, String>()
+        for (c in PreplannedCatalog.defaultCategoryNames) seen.putIfAbsent(c.lowercase(), c)
+        for (c in custom) if (c.isNotBlank()) seen.putIfAbsent(c.lowercase(), c.trim())
+        for (item in items) {
+            val cat = item.category.trim()
+            if (cat.isNotEmpty()) seen.putIfAbsent(cat.lowercase(), cat)
+        }
+        seen.values.toList()
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), PreplannedCatalog.defaultCategoryNames)
+
+    val availableLocations: StateFlow<List<String>> = combine(
+        allInventory,
+        customLocations
+    ) { items, custom ->
+        val seen = LinkedHashMap<String, String>()
+        for (l in PreplannedCatalog.standardLocations) seen.putIfAbsent(l.lowercase(), l)
+        for (l in custom) if (l.isNotBlank()) seen.putIfAbsent(l.lowercase(), l.trim())
+        for (item in items) {
+            val loc = item.location.trim()
+            if (loc.isNotEmpty()) seen.putIfAbsent(loc.lowercase(), loc)
+        }
+        seen.values.toList()
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), PreplannedCatalog.standardLocations)
 
     val filteredInventory: StateFlow<List<InventoryItem>> = combine(
         allInventory,
         searchQuery,
         categoryFilter,
-        locationFilter
-    ) { items, query, cat, loc ->
+        locationFilter,
+        combine(lowStockOnlyFilter, expiringOnlyFilter) { a, b -> a to b }
+    ) { items, query, cat, loc, flags ->
+        val (onlyLow, onlyExp) = flags
         items.filter { item ->
             val matchesQuery = query.isEmpty() ||
                     item.name.contains(query, ignoreCase = true) ||
@@ -110,7 +146,9 @@ class MainViewModel(
                     item.location.contains(query, ignoreCase = true)
             val matchesCat = cat == "All" || item.category.equals(cat, ignoreCase = true)
             val matchesLoc = loc == "All" || item.location.equals(loc, ignoreCase = true)
-            matchesQuery && matchesCat && matchesLoc
+            val matchesLow = !onlyLow || item.isLowStock
+            val matchesExp = !onlyExp || item.isExpiringSoon || item.isExpired
+            matchesQuery && matchesCat && matchesLoc && matchesLow && matchesExp
         }
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
@@ -203,6 +241,54 @@ class MainViewModel(
         val actor = currentAccount.value?.displayName ?: "Family Member"
         viewModelScope.launch {
             repository.addInventoryItem(item, actor, currentAccount.value)
+        }
+    }
+
+    fun updateItem(item: InventoryItem) {
+        val actor = currentAccount.value?.displayName ?: "Family Member"
+        viewModelScope.launch {
+            repository.updateInventoryItem(item, actor, currentAccount.value)
+        }
+    }
+
+    fun deleteItem(itemId: String) {
+        val actor = currentAccount.value?.displayName ?: "Family Member"
+        viewModelScope.launch {
+            repository.deleteInventoryItem(itemId, actor, currentAccount.value)
+        }
+    }
+
+    fun addCustomCategory(name: String) {
+        val trimmed = name.trim()
+        if (trimmed.isNotEmpty()) {
+            customCategories.value = customCategories.value + trimmed
+        }
+    }
+
+    fun addCustomLocation(name: String) {
+        val trimmed = name.trim()
+        if (trimmed.isNotEmpty()) {
+            customLocations.value = customLocations.value + trimmed
+        }
+    }
+
+    fun openFilteredInventory(
+        lowStockOnly: Boolean = false,
+        expiringOnly: Boolean = false,
+        category: String = "All"
+    ) {
+        searchQuery.value = ""
+        categoryFilter.value = category
+        locationFilter.value = "All"
+        lowStockOnlyFilter.value = lowStockOnly
+        expiringOnlyFilter.value = expiringOnly
+        currentTab.value = NavTab.INVENTORY
+    }
+
+    fun moveGroceryToPantry(groceryItem: GroceryItem) {
+        val actor = currentAccount.value?.displayName ?: "Family Member"
+        viewModelScope.launch {
+            repository.restockFromGroceryItem(groceryItem, actor, currentAccount.value)
         }
     }
 

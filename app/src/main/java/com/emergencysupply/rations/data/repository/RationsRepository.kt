@@ -188,6 +188,106 @@ class RationsRepository(
         }
     }
 
+    suspend fun updateInventoryItem(item: InventoryItem, actor: String, account: GoogleSignInAccount?) {
+        val now = dateFormat.format(Date())
+        val restockNeeded = maxOf(0.0, item.parLevel - item.currentQty)
+        val stockStatus = if (item.currentQty < item.parLevel) "LOW" else "OK"
+        val totalServings = item.currentQty * item.servingsPerUnit
+        val updated = item.copy(
+            restockNeeded = restockNeeded,
+            stockStatus = stockStatus,
+            totalServings = totalServings,
+            lastUpdated = now,
+            syncPending = true
+        )
+        inventoryDao.updateItem(updated)
+
+        historyDao.insert(
+            HistoryLogEntry(
+                timestamp = now,
+                action = "EDIT",
+                category = updated.category,
+                itemName = updated.name,
+                change = 0.0,
+                newStock = updated.currentQty,
+                unit = updated.unit,
+                expirationDate = updated.earliestExpiry,
+                notes = "Updated settings by $actor (Android)",
+                syncPending = true
+            )
+        )
+
+        syncDao.insertAction(
+            PendingSyncAction(
+                actionType = "UPDATE_ITEM",
+                targetId = updated.id,
+                payloadJson = "{\"name\": \"${updated.name}\"}"
+            )
+        )
+
+        if (account != null) {
+            triggerBackgroundSync(account)
+        }
+    }
+
+    suspend fun deleteInventoryItem(itemId: String, actor: String, account: GoogleSignInAccount?) {
+        val existing = inventoryDao.getItemById(itemId)
+        val now = dateFormat.format(Date())
+        inventoryDao.deleteById(itemId)
+
+        if (existing != null) {
+            historyDao.insert(
+                HistoryLogEntry(
+                    timestamp = now,
+                    action = "DELETE",
+                    category = existing.category,
+                    itemName = existing.name,
+                    change = -existing.currentQty,
+                    newStock = 0.0,
+                    unit = existing.unit,
+                    expirationDate = existing.earliestExpiry,
+                    notes = "Deleted by $actor (Android)",
+                    syncPending = true
+                )
+            )
+        }
+
+        syncDao.insertAction(
+            PendingSyncAction(
+                actionType = "DELETE_ITEM",
+                targetId = itemId,
+                payloadJson = "{}"
+            )
+        )
+
+        if (account != null) {
+            triggerBackgroundSync(account)
+        }
+    }
+
+    suspend fun restockFromGroceryItem(grocery: GroceryItem, actor: String, account: GoogleSignInAccount?) {
+        toggleGroceryChecked(grocery.id, true, null)
+        val allItems = inventoryDao.getAllItemsOnce()
+        val match = allItems.firstOrNull { it.name.equals(grocery.name, ignoreCase = true) }
+        if (match != null) {
+            restockItem(match.id, grocery.qty, actor, account)
+        } else {
+            val newItem = InventoryItem(
+                id = "RATION-" + java.util.UUID.randomUUID().toString().take(6).uppercase(),
+                name = grocery.name,
+                category = grocery.aisle.ifBlank { "Canned Goods & Produce" },
+                unit = grocery.unit.ifBlank { "packs" },
+                location = "Main Pantry",
+                initialQty = grocery.qty,
+                currentQty = grocery.qty,
+                parLevel = maxOf(grocery.qty, 2.0),
+                servingsPerUnit = 1.0,
+                notes = "Added from Groceries ($actor)"
+            )
+            addInventoryItem(newItem, actor, account)
+        }
+    }
+
     suspend fun addGroceryItem(
         name: String,
         qty: Double,
@@ -321,13 +421,17 @@ class RationsRepository(
                     }
 
                     // Inventory actions
-                    val inventoryActionTypes = setOf("USE_ITEM", "RESTOCK_ITEM", "ADD_ITEM", "UPDATE_ITEM")
+                    val inventoryActionTypes = setOf("USE_ITEM", "RESTOCK_ITEM", "ADD_ITEM", "UPDATE_ITEM", "DELETE_ITEM")
                     val inventoryActions = pendingActions.filter { it.actionType in inventoryActionTypes }
                     for (action in inventoryActions) {
-                        val item = inventoryDao.getItemById(action.targetId)
-                        if (item != null) {
-                            sheetsClient.upsertInventoryItem(account, item)
-                            inventoryDao.updateItem(item.copy(syncPending = false))
+                        if (action.actionType == "DELETE_ITEM") {
+                            sheetsClient.deleteInventoryRow(account, action.targetId)
+                        } else {
+                            val item = inventoryDao.getItemById(action.targetId)
+                            if (item != null) {
+                                sheetsClient.upsertInventoryItem(account, item)
+                                inventoryDao.updateItem(item.copy(syncPending = false))
+                            }
                         }
                         // Also push any unsynced history entries
                         val pendingHistory = historyDao.getPendingEntries()

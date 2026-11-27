@@ -12,8 +12,12 @@ import com.google.api.client.http.javanet.NetHttpTransport
 import com.google.api.client.json.gson.GsonFactory
 import com.google.api.services.sheets.v4.Sheets
 import com.google.api.services.sheets.v4.SheetsScopes
+import com.google.api.services.sheets.v4.model.BatchUpdateSpreadsheetRequest
 import com.google.api.services.sheets.v4.model.BatchUpdateValuesRequest
 import com.google.api.services.sheets.v4.model.ClearValuesRequest
+import com.google.api.services.sheets.v4.model.DeleteDimensionRequest
+import com.google.api.services.sheets.v4.model.DimensionRange
+import com.google.api.services.sheets.v4.model.Request
 import com.google.api.services.sheets.v4.model.ValueRange
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -116,8 +120,8 @@ class GoogleSheetsClient(private val context: Context) {
 
             if (isFormula) {
                 val batchData = listOf(
-                    ValueRange().setRange("'Master Inventory'!C$rowNum:H$rowNum").setValues(
-                        listOf(listOf<Any>(item.category, item.unit, item.location, item.initialQty, item.stockIn, item.stockOut))
+                    ValueRange().setRange("'Master Inventory'!B$rowNum:H$rowNum").setValues(
+                        listOf(listOf<Any>(item.name, item.category, item.unit, item.location, item.initialQty, item.stockIn, item.stockOut))
                     ),
                     ValueRange().setRange("'Master Inventory'!J$rowNum").setValues(
                         listOf(listOf<Any>(item.parLevel))
@@ -193,6 +197,39 @@ class GoogleSheetsClient(private val context: Context) {
                 .append(spreadsheetId, "'Master Inventory'!A:S", body)
                 .setValueInputOption("USER_ENTERED")
                 .execute()
+        }
+    }
+
+    suspend fun deleteInventoryRow(account: GoogleSignInAccount, itemId: String) = withContext(Dispatchers.IO) {
+        val service = getSheetsService(account)
+        val response: ValueRange = service.spreadsheets().values()
+            .get(spreadsheetId, "'Master Inventory'!A2:A")
+            .execute()
+        val rows = response.getValues() ?: return@withContext
+        val index = rows.indexOfFirst { it.getOrNull(0)?.toString()?.trim() == itemId }
+        if (index != -1) {
+            val rowNum = index + 2
+            val spreadsheet = service.spreadsheets().get(spreadsheetId).execute()
+            val sheetId = spreadsheet.sheets?.firstOrNull {
+                it.properties?.title == "Master Inventory"
+            }?.properties?.sheetId
+            if (sheetId != null) {
+                val deleteReq = DeleteDimensionRequest().setRange(
+                    DimensionRange()
+                        .setSheetId(sheetId)
+                        .setDimension("ROWS")
+                        .setStartIndex(rowNum - 1)
+                        .setEndIndex(rowNum)
+                )
+                service.spreadsheets().batchUpdate(
+                    spreadsheetId,
+                    BatchUpdateSpreadsheetRequest().setRequests(listOf(Request().setDeleteDimension(deleteReq)))
+                ).execute()
+            } else {
+                service.spreadsheets().values()
+                    .clear(spreadsheetId, "'Master Inventory'!A$rowNum:S$rowNum", ClearValuesRequest())
+                    .execute()
+            }
         }
     }
 

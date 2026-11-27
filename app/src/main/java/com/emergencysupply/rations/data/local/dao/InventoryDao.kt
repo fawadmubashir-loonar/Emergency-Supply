@@ -13,6 +13,9 @@ interface InventoryDao {
     @Query("SELECT * FROM master_inventory ORDER BY name ASC")
     fun getAllItems(): Flow<List<InventoryItem>>
 
+    @Query("SELECT * FROM master_inventory ORDER BY name ASC")
+    suspend fun getAllItemsOnce(): List<InventoryItem>
+
     @Query("SELECT * FROM master_inventory WHERE id = :id LIMIT 1")
     suspend fun getItemById(id: String): InventoryItem?
 
@@ -30,6 +33,9 @@ interface InventoryDao {
 
     @Update
     suspend fun updateItem(item: InventoryItem)
+
+    @Query("DELETE FROM master_inventory WHERE id = :id")
+    suspend fun deleteById(id: String)
 
     @Query("UPDATE master_inventory SET currentQty = :newQty, stockOut = stockOut + :usedDelta, restockNeeded = :restockNeeded, stockStatus = :stockStatus, totalServings = :totalServings, lastUpdated = :timestamp, syncPending = 1 WHERE id = :itemId")
     suspend fun applyUseItem(

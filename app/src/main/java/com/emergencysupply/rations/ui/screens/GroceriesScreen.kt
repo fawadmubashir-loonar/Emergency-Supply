@@ -1,7 +1,7 @@
 package com.emergencysupply.rations.ui.screens
 
+import android.widget.Toast
 import androidx.compose.foundation.BorderStroke
-import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -22,10 +22,9 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.DeleteSweep
+import androidx.compose.material.icons.filled.Inventory
 import androidx.compose.material.icons.filled.ShoppingCart
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.outlined.StarOutline
@@ -39,7 +38,6 @@ import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
@@ -54,11 +52,13 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.emergencysupply.rations.data.PreplannedCatalog
 import com.emergencysupply.rations.data.local.entity.GroceryItem
 import com.emergencysupply.rations.ui.MainViewModel
 import com.emergencysupply.rations.ui.theme.BorderSlate
@@ -70,16 +70,15 @@ import com.emergencysupply.rations.ui.theme.LightSlate
 import com.emergencysupply.rations.ui.theme.MediumSlate
 import com.emergencysupply.rations.ui.theme.MidnightSlate
 import com.emergencysupply.rations.ui.theme.MutedSlate
-import com.emergencysupply.rations.ui.theme.SuccessGreen
-import com.emergencysupply.rations.ui.theme.SuccessSoft
-import com.emergencysupply.rations.ui.theme.TealAccent
 import com.emergencysupply.rations.ui.theme.TealPrimary
 import com.emergencysupply.rations.ui.theme.TealSoft
 import com.emergencysupply.rations.ui.theme.WarningAmber
 
 @Composable
 fun GroceriesScreen(viewModel: MainViewModel) {
+    val context = LocalContext.current
     val groceries by viewModel.allGroceries.collectAsState()
+    val allInventory by viewModel.allInventory.collectAsState()
     val selectedStore by viewModel.groceryStoreFilter.collectAsState()
 
     var newName by remember { mutableStateOf("") }
@@ -89,6 +88,11 @@ fun GroceriesScreen(viewModel: MainViewModel) {
     var newAisle by remember { mutableStateOf("General") }
 
     val storeOptions = listOf("All Stores", "Costco", "Halal Market", "Grocery Store", "Target", "Other")
+
+    val quickPickItems = remember(allInventory) {
+        val lowNames = allInventory.filter { it.isLowStock }.map { it.name }
+        (lowNames + PreplannedCatalog.groceryQuickPicks).distinct().take(16)
+    }
 
     val filteredGroceries = groceries.filter {
         selectedStore == "All Stores" || it.store.equals(selectedStore, ignoreCase = true)
@@ -103,7 +107,7 @@ fun GroceriesScreen(viewModel: MainViewModel) {
             .padding(horizontal = 16.dp, vertical = 8.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        // 1. Quick Add Section
+        // 1. Quick Add Section with One-Tap Pantry/Staple Chips
         item {
             Card(
                 modifier = Modifier.fillMaxWidth(),
@@ -119,6 +123,39 @@ fun GroceriesScreen(viewModel: MainViewModel) {
                         fontWeight = FontWeight.Bold,
                         color = MidnightSlate
                     )
+                    Spacer(modifier = Modifier.height(6.dp))
+
+                    // Scrollable One-Tap Quick-Pick Chips (no typing required!)
+                    LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        items(quickPickItems) { pick ->
+                            Surface(
+                                shape = RoundedCornerShape(16.dp),
+                                color = TealSoft,
+                                border = BorderStroke(1.dp, TealPrimary.copy(alpha = 0.3f)),
+                                modifier = Modifier.clickable {
+                                    val targetStore = if (selectedStore != "All Stores") selectedStore else newStore
+                                    val matchInv = allInventory.firstOrNull { it.name.equals(pick, ignoreCase = true) }
+                                    viewModel.addGroceryItem(
+                                        name = pick,
+                                        qty = matchInv?.let { maxOf(1.0, it.parLevel - it.currentQty) } ?: 1.0,
+                                        unit = matchInv?.unit?.ifBlank { "packs" } ?: "packs",
+                                        aisle = matchInv?.category ?: "General",
+                                        store = targetStore
+                                    )
+                                    Toast.makeText(context, "Added $pick to $targetStore", Toast.LENGTH_SHORT).show()
+                                }
+                            ) {
+                                Text(
+                                    text = "+ $pick",
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = TealPrimary,
+                                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp)
+                                )
+                            }
+                        }
+                    }
+
                     Spacer(modifier = Modifier.height(10.dp))
 
                     Row(
@@ -129,7 +166,7 @@ fun GroceriesScreen(viewModel: MainViewModel) {
                         OutlinedTextField(
                             value = newName,
                             onValueChange = { newName = it },
-                            placeholder = { Text("Add item (e.g. Tuna, Basmati Rice)...", fontSize = 13.sp, color = LightSlate) },
+                            placeholder = { Text("Or type custom item...", fontSize = 13.sp, color = LightSlate) },
                             singleLine = true,
                             modifier = Modifier.weight(1.8f),
                             shape = RoundedCornerShape(12.dp),
@@ -183,13 +220,12 @@ fun GroceriesScreen(viewModel: MainViewModel) {
 
                     Spacer(modifier = Modifier.height(10.dp))
 
-                    // Store selection for Quick Add
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.spacedBy(6.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Text(text = "Target:", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = MediumSlate)
+                        Text(text = "Store:", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = MediumSlate)
                         val storeQuickList = listOf("Grocery Store", "Costco", "Halal Market", "Target")
                         storeQuickList.forEach { s ->
                             val isSel = (if (selectedStore != "All Stores") selectedStore else newStore).equals(s, ignoreCase = true)
@@ -253,7 +289,7 @@ fun GroceriesScreen(viewModel: MainViewModel) {
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
-                    text = "$uncheckedCount remaining to buy ($checkedCount completed)",
+                    text = "$uncheckedCount remaining ($checkedCount checked)",
                     fontSize = 13.sp,
                     fontWeight = FontWeight.Bold,
                     color = MidnightSlate
@@ -313,7 +349,7 @@ fun GroceriesScreen(viewModel: MainViewModel) {
                             )
                             Spacer(modifier = Modifier.height(4.dp))
                             Text(
-                                text = "Restock items added from Dashboard appear here automatically.",
+                                text = "Tap any quick-pick chip above to add items instantly.",
                                 fontSize = 12.sp,
                                 color = MediumSlate
                             )
@@ -322,7 +358,6 @@ fun GroceriesScreen(viewModel: MainViewModel) {
                 }
             }
         } else {
-            // Group by Store then by Aisle
             val byStore = filteredGroceries.groupBy { it.store }
             byStore.forEach { (store, itemsInStore) ->
                 item {
@@ -357,6 +392,10 @@ fun GroceriesScreen(viewModel: MainViewModel) {
                         item = item,
                         onToggleChecked = { viewModel.toggleGroceryChecked(item.id, !item.checked) },
                         onToggleFavorite = { viewModel.toggleGroceryFavorite(item.id, !item.favorite) },
+                        onMoveToPantry = {
+                            viewModel.moveGroceryToPantry(item)
+                            Toast.makeText(context, "Restocked +%.0f ${item.name} into Pantry!".format(item.qty), Toast.LENGTH_SHORT).show()
+                        },
                         onDelete = { viewModel.deleteGrocery(item.id) }
                     )
                 }
@@ -372,6 +411,7 @@ fun ReformedGroceryItemCard(
     item: GroceryItem,
     onToggleChecked: () -> Unit,
     onToggleFavorite: () -> Unit,
+    onMoveToPantry: () -> Unit,
     onDelete: () -> Unit
 ) {
     Card(
@@ -380,7 +420,7 @@ fun ReformedGroceryItemCard(
         colors = CardDefaults.cardColors(
             containerColor = if (item.checked) Color(0xFFF8FAFC) else CardSurface
         ),
-        border = BorderStroke(1.dp, if (item.checked) BorderSlate else BorderSlate),
+        border = BorderStroke(1.dp, BorderSlate),
         elevation = CardDefaults.cardElevation(defaultElevation = if (item.checked) 0.dp else 1.dp)
     ) {
         Row(
@@ -431,18 +471,35 @@ fun ReformedGroceryItemCard(
                 }
             }
 
-            // Favorite star
-            IconButton(onClick = onToggleFavorite, modifier = Modifier.size(32.dp)) {
+            // 1-tap Move to Pantry Stock button
+            Surface(
+                shape = RoundedCornerShape(8.dp),
+                color = TealSoft,
+                border = BorderStroke(1.dp, TealPrimary.copy(alpha = 0.25f)),
+                modifier = Modifier
+                    .padding(end = 4.dp)
+                    .clickable(onClick = onMoveToPantry)
+            ) {
+                Row(
+                    modifier = Modifier.padding(horizontal = 7.dp, vertical = 5.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(Icons.Default.Inventory, contentDescription = "Move to Pantry", tint = TealPrimary, modifier = Modifier.size(13.dp))
+                    Spacer(modifier = Modifier.width(3.dp))
+                    Text("+ Pantry", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = TealPrimary)
+                }
+            }
+
+            IconButton(onClick = onToggleFavorite, modifier = Modifier.size(30.dp)) {
                 Icon(
                     imageVector = if (item.favorite) Icons.Default.Star else Icons.Outlined.StarOutline,
                     contentDescription = "Favorite",
                     tint = if (item.favorite) WarningAmber else LightSlate,
-                    modifier = Modifier.size(20.dp)
+                    modifier = Modifier.size(19.dp)
                 )
             }
 
-            // Delete
-            IconButton(onClick = onDelete, modifier = Modifier.size(32.dp)) {
+            IconButton(onClick = onDelete, modifier = Modifier.size(30.dp)) {
                 Icon(
                     imageVector = Icons.Default.Delete,
                     contentDescription = "Delete",

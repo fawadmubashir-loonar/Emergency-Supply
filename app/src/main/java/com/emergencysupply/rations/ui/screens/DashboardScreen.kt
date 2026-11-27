@@ -2,7 +2,7 @@ package com.emergencysupply.rations.ui.screens
 
 import android.widget.Toast
 import androidx.compose.foundation.BorderStroke
-import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -16,17 +16,14 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.AddShoppingCart
-import androidx.compose.material.icons.filled.Category
-import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Fastfood
 import androidx.compose.material.icons.filled.HourglassBottom
 import androidx.compose.material.icons.filled.Inventory
-import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.filled.Remove
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.Button
@@ -34,15 +31,16 @@ import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -51,6 +49,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.emergencysupply.rations.data.PreplannedCatalog
 import com.emergencysupply.rations.data.local.entity.InventoryItem
 import com.emergencysupply.rations.ui.MainViewModel
 import com.emergencysupply.rations.ui.theme.BorderSlate
@@ -65,18 +64,21 @@ import com.emergencysupply.rations.ui.theme.MediumSlate
 import com.emergencysupply.rations.ui.theme.MidnightSlate
 import com.emergencysupply.rations.ui.theme.SuccessGreen
 import com.emergencysupply.rations.ui.theme.SuccessSoft
-import com.emergencysupply.rations.ui.theme.TealAccent
 import com.emergencysupply.rations.ui.theme.TealPrimary
 import com.emergencysupply.rations.ui.theme.TealSoft
-import com.emergencysupply.rations.ui.theme.TealVerySoft
 import com.emergencysupply.rations.ui.theme.WarningAmber
 import com.emergencysupply.rations.ui.theme.WarningSoft
 
 @Composable
 fun DashboardScreen(viewModel: MainViewModel) {
+    val context = LocalContext.current
     val metrics by viewModel.dashboardMetrics.collectAsState()
     val expiringItems by viewModel.earliestExpiring.collectAsState()
     val restockItems by viewModel.restockNeeded.collectAsState()
+    val availableCategories by viewModel.availableCategories.collectAsState()
+    val availableLocations by viewModel.availableLocations.collectAsState()
+
+    var editingItem by remember { mutableStateOf<InventoryItem?>(null) }
 
     LazyColumn(
         modifier = Modifier
@@ -129,7 +131,6 @@ fun DashboardScreen(viewModel: MainViewModel) {
                             }
                         }
 
-                        // Readiness Badge
                         Surface(
                             shape = RoundedCornerShape(12.dp),
                             color = Color.White.copy(alpha = 0.15f)
@@ -146,9 +147,8 @@ fun DashboardScreen(viewModel: MainViewModel) {
 
                     Spacer(modifier = Modifier.height(14.dp))
 
-                    // Progress toward 90-day readiness goal
-                    val rawSupplyProgress = (metrics.estDaysOfSupply.toFloat() / 90f)
-                    val supplyProgress = if (rawSupplyProgress.isNaN() || rawSupplyProgress.isInfinite()) 0f else rawSupplyProgress.coerceIn(0f, 1f)
+                    val rawSupply = metrics.estDaysOfSupply.toFloat() / 90f
+                    val supplyProgress = if (rawSupply.isNaN() || rawSupply.isInfinite()) 0f else rawSupply.coerceIn(0f, 1f)
                     LinearProgressIndicator(
                         progress = { supplyProgress },
                         modifier = Modifier
@@ -169,7 +169,7 @@ fun DashboardScreen(viewModel: MainViewModel) {
             }
         }
 
-        // 2. 2x2 Metric Grid
+        // 2. Interactive 2x2 Metric Grid (Tap to jump straight to filtered Inventory!)
         item {
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 Row(
@@ -183,6 +183,7 @@ fun DashboardScreen(viewModel: MainViewModel) {
                         value = "%,.0f".format(metrics.totalServings),
                         title = "Food Servings",
                         subtitle = "Total pantry calories",
+                        onClick = { viewModel.openFilteredInventory() },
                         modifier = Modifier.weight(1f)
                     )
                     MetricTile(
@@ -191,7 +192,8 @@ fun DashboardScreen(viewModel: MainViewModel) {
                         iconBg = TealSoft,
                         value = "%,.0f".format(metrics.totalUnitsInStock),
                         title = "Units in Stock",
-                        subtitle = "${metrics.totalUniqueItems} unique items",
+                        subtitle = "${metrics.totalUniqueItems} items • Tap to browse",
+                        onClick = { viewModel.openFilteredInventory() },
                         modifier = Modifier.weight(1f)
                     )
                 }
@@ -206,7 +208,8 @@ fun DashboardScreen(viewModel: MainViewModel) {
                         iconBg = if (metrics.expiringSoonCount > 0) WarningSoft else SuccessSoft,
                         value = "${metrics.expiringSoonCount}",
                         title = "Expiring Soon",
-                        subtitle = if (metrics.expiringSoonCount > 0) "<6 months left" else "All dates healthy",
+                        subtitle = if (metrics.expiringSoonCount > 0) "Tap to view <6 mos" else "All dates healthy",
+                        onClick = { viewModel.openFilteredInventory(expiringOnly = true) },
                         modifier = Modifier.weight(1f)
                     )
                     MetricTile(
@@ -215,7 +218,8 @@ fun DashboardScreen(viewModel: MainViewModel) {
                         iconBg = if (metrics.restockNeededCount > 0) DangerSoft else SuccessSoft,
                         value = "${metrics.restockNeededCount}",
                         title = "Restock Needed",
-                        subtitle = if (metrics.restockNeededCount > 0) "Below target par" else "All par met",
+                        subtitle = if (metrics.restockNeededCount > 0) "Tap to filter low" else "All par met",
+                        onClick = { viewModel.openFilteredInventory(lowStockOnly = true) },
                         modifier = Modifier.weight(1f)
                     )
                 }
@@ -239,7 +243,7 @@ fun DashboardScreen(viewModel: MainViewModel) {
                         color = MidnightSlate
                     )
                     Text(
-                        text = "Earliest expiring rations to rotate first",
+                        text = "Earliest expiring rations • Tap any item to edit",
                         fontSize = 12.sp,
                         color = MediumSlate
                     )
@@ -290,7 +294,14 @@ fun DashboardScreen(viewModel: MainViewModel) {
             }
         } else {
             items(expiringItems, key = { "fifo_${it.id}" }) { item ->
-                ReformedFifoCard(item = item, onUseOne = { viewModel.useItem(item.id, 1.0) })
+                ReformedFifoCard(
+                    item = item,
+                    onCardClick = { editingItem = item },
+                    onUseOne = {
+                        viewModel.useItem(item.id, 1.0)
+                        Toast.makeText(context, "Used 1 ${item.name}", Toast.LENGTH_SHORT).show()
+                    }
+                )
             }
         }
 
@@ -311,7 +322,7 @@ fun DashboardScreen(viewModel: MainViewModel) {
                         color = MidnightSlate
                     )
                     Text(
-                        text = "Pantry items that need replenishment",
+                        text = "Tap +1 to restock or add to shopping list",
                         fontSize = 12.sp,
                         color = MediumSlate
                     )
@@ -364,12 +375,51 @@ fun DashboardScreen(viewModel: MainViewModel) {
             items(restockItems, key = { "restock_${it.id}" }) { item ->
                 ReformedRestockCard(
                     item = item,
-                    onAddToGroceries = { viewModel.addRestockItemToGroceries(item) }
+                    onCardClick = { editingItem = item },
+                    onQuickRestock = {
+                        viewModel.restockItem(item.id, 1.0)
+                        Toast.makeText(context, "+1 ${item.name} synced to Sheet", Toast.LENGTH_SHORT).show()
+                    },
+                    onAddToGroceries = {
+                        viewModel.addRestockItemToGroceries(item)
+                        Toast.makeText(context, "Added ${item.name} to Groceries", Toast.LENGTH_SHORT).show()
+                    }
                 )
             }
         }
 
         item { Spacer(modifier = Modifier.height(24.dp)) }
+    }
+
+    editingItem?.let { current ->
+        InventoryItemEditorDialog(
+            item = current,
+            availableCategories = availableCategories,
+            availableLocations = availableLocations,
+            onCreateCategory = { viewModel.addCustomCategory(it) },
+            onCreateLocation = { viewModel.addCustomLocation(it) },
+            onDismiss = { editingItem = null },
+            onSave = { updated ->
+                viewModel.updateItem(updated)
+                Toast.makeText(context, "Saved ${updated.name}", Toast.LENGTH_SHORT).show()
+                editingItem = null
+            },
+            onQuickStep = { delta ->
+                if (delta > 0) viewModel.restockItem(current.id, delta)
+                else viewModel.useItem(current.id, -delta)
+                editingItem = null
+            },
+            onAddToGroceries = {
+                viewModel.addRestockItemToGroceries(current)
+                Toast.makeText(context, "Added ${current.name} to Groceries", Toast.LENGTH_SHORT).show()
+                editingItem = null
+            },
+            onDelete = {
+                viewModel.deleteItem(current.id)
+                Toast.makeText(context, "Deleted ${current.name}", Toast.LENGTH_SHORT).show()
+                editingItem = null
+            }
+        )
     }
 }
 
@@ -381,10 +431,11 @@ fun MetricTile(
     value: String,
     title: String,
     subtitle: String,
+    onClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     Card(
-        modifier = modifier,
+        modifier = modifier.clickable(onClick = onClick),
         shape = RoundedCornerShape(14.dp),
         colors = CardDefaults.cardColors(containerColor = CardSurface),
         border = BorderStroke(1.dp, BorderSlate),
@@ -427,9 +478,15 @@ fun MetricTile(
 }
 
 @Composable
-fun ReformedFifoCard(item: InventoryItem, onUseOne: () -> Unit) {
+fun ReformedFifoCard(
+    item: InventoryItem,
+    onCardClick: () -> Unit,
+    onUseOne: () -> Unit
+) {
     Card(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onCardClick),
         shape = RoundedCornerShape(14.dp),
         colors = CardDefaults.cardColors(containerColor = CardSurface),
         border = BorderStroke(1.dp, BorderSlate),
@@ -444,7 +501,7 @@ fun ReformedFifoCard(item: InventoryItem, onUseOne: () -> Unit) {
         ) {
             Column(modifier = Modifier.weight(1f)) {
                 Text(
-                    text = item.name,
+                    text = "${PreplannedCatalog.iconForCategory(item.category)} ${item.name}",
                     fontWeight = FontWeight.Bold,
                     fontSize = 15.sp,
                     color = MidnightSlate
@@ -483,7 +540,6 @@ fun ReformedFifoCard(item: InventoryItem, onUseOne: () -> Unit) {
                 )
             }
 
-            // Quick Use Button
             OutlinedButton(
                 onClick = onUseOne,
                 shape = RoundedCornerShape(10.dp),
@@ -500,12 +556,18 @@ fun ReformedFifoCard(item: InventoryItem, onUseOne: () -> Unit) {
 }
 
 @Composable
-fun ReformedRestockCard(item: InventoryItem, onAddToGroceries: () -> Unit) {
-    val context = LocalContext.current
+fun ReformedRestockCard(
+    item: InventoryItem,
+    onCardClick: () -> Unit,
+    onQuickRestock: () -> Unit,
+    onAddToGroceries: () -> Unit
+) {
     val deficit = if (item.parLevel > item.currentQty) (item.parLevel - item.currentQty) else 1.0
 
     Card(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onCardClick),
         shape = RoundedCornerShape(14.dp),
         colors = CardDefaults.cardColors(containerColor = CardSurface),
         border = BorderStroke(1.dp, DangerRed.copy(alpha = 0.25f)),
@@ -518,7 +580,7 @@ fun ReformedRestockCard(item: InventoryItem, onAddToGroceries: () -> Unit) {
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
-                    text = item.name,
+                    text = "${PreplannedCatalog.iconForCategory(item.category)} ${item.name}",
                     fontSize = 15.sp,
                     fontWeight = FontWeight.Bold,
                     color = MidnightSlate,
@@ -541,9 +603,8 @@ fun ReformedRestockCard(item: InventoryItem, onAddToGroceries: () -> Unit) {
 
             Spacer(modifier = Modifier.height(8.dp))
 
-            // Stock Bar
-            val rawParProgress = if (item.parLevel > 0) (item.currentQty / item.parLevel).toFloat() else 0f
-            val parProgress = if (rawParProgress.isNaN() || rawParProgress.isInfinite()) 0f else rawParProgress.coerceIn(0f, 1f)
+            val rawPar = if (item.parLevel > 0) (item.currentQty / item.parLevel).toFloat() else 0f
+            val parProgress = if (rawPar.isNaN() || rawPar.isInfinite()) 0f else rawPar.coerceIn(0f, 1f)
             LinearProgressIndicator(
                 progress = { parProgress },
                 modifier = Modifier
@@ -553,7 +614,7 @@ fun ReformedRestockCard(item: InventoryItem, onAddToGroceries: () -> Unit) {
                 trackColor = Color(0xFFE2E8F0)
             )
 
-            Spacer(modifier = Modifier.height(6.dp))
+            Spacer(modifier = Modifier.height(8.dp))
 
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -567,18 +628,29 @@ fun ReformedRestockCard(item: InventoryItem, onAddToGroceries: () -> Unit) {
                     fontWeight = FontWeight.Medium
                 )
 
-                Button(
-                    onClick = {
-                        onAddToGroceries()
-                        Toast.makeText(context, "Added ${item.name} to Groceries", Toast.LENGTH_SHORT).show()
-                    },
-                    shape = RoundedCornerShape(8.dp),
-                    colors = ButtonDefaults.buttonColors(containerColor = TealPrimary),
-                    modifier = Modifier.height(34.dp)
-                ) {
-                    Icon(imageVector = Icons.Default.AddShoppingCart, contentDescription = null, modifier = Modifier.size(14.dp))
-                    Spacer(modifier = Modifier.width(4.dp))
-                    Text(text = "Add to Groceries", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    OutlinedButton(
+                        onClick = onQuickRestock,
+                        shape = RoundedCornerShape(8.dp),
+                        border = BorderStroke(1.dp, TealPrimary.copy(alpha = 0.4f)),
+                        colors = ButtonDefaults.outlinedButtonColors(containerColor = TealSoft),
+                        modifier = Modifier.height(34.dp)
+                    ) {
+                        Icon(imageVector = Icons.Default.Add, contentDescription = "Restock +1", modifier = Modifier.size(14.dp), tint = TealPrimary)
+                        Spacer(modifier = Modifier.width(2.dp))
+                        Text(text = "+1", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = TealPrimary)
+                    }
+
+                    Button(
+                        onClick = onAddToGroceries,
+                        shape = RoundedCornerShape(8.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = TealPrimary),
+                        modifier = Modifier.height(34.dp)
+                    ) {
+                        Icon(imageVector = Icons.Default.AddShoppingCart, contentDescription = null, modifier = Modifier.size(14.dp))
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text(text = "Groceries", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                    }
                 }
             }
         }
