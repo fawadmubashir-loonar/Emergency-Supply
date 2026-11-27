@@ -28,6 +28,14 @@ class MainActivity : ComponentActivity() {
         )
     }
 
+    override fun onResume() {
+        super.onResume()
+        val currentStatus = app.updater.status.value
+        if (currentStatus is com.emergencysupply.rations.updater.UpdateStatus.ReadyToInstall) {
+            app.updater.launchInstaller(this, currentStatus.apkFile)
+        }
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 

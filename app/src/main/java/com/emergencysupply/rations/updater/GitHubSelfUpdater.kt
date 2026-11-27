@@ -80,11 +80,7 @@ class GitHubSelfUpdater(private val context: Context) {
 
             val response = httpClient.newCall(request).execute()
             if (!response.isSuccessful) {
-                if (response.code == 404) {
-                    _status.value = UpdateStatus.UpToDate
-                } else {
-                    _status.value = UpdateStatus.Error("GitHub API check failed (${response.code})")
-                }
+                _status.value = UpdateStatus.Error("GitHub API check returned ${response.code} (Repository may be private).")
                 return@withContext
             }
 
@@ -114,7 +110,7 @@ class GitHubSelfUpdater(private val context: Context) {
     suspend fun downloadAndInstallApk(activity: Activity, asset: GitHubAsset) = withContext(Dispatchers.IO) {
         _status.value = UpdateStatus.Downloading(0f)
         try {
-            val updateDir = File(context.cacheDir, "updates").apply { mkdirs() }
+            val updateDir = File(context.getExternalFilesDir(null) ?: context.cacheDir, "updates").apply { mkdirs() }
             val destinationFile = File(updateDir, "EmergencySupply-update.apk")
             if (destinationFile.exists()) destinationFile.delete()
 
@@ -156,16 +152,6 @@ class GitHubSelfUpdater(private val context: Context) {
     }
 
     fun launchInstaller(activity: Activity, apkFile: File) {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            if (!activity.packageManager.canRequestPackageInstalls()) {
-                val intent = Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES).apply {
-                    data = Uri.parse("package:${activity.packageName}")
-                }
-                activity.startActivity(intent)
-                return
-            }
-        }
-
         val apkUri = FileProvider.getUriForFile(
             context,
             "${context.packageName}.fileprovider",
@@ -178,7 +164,17 @@ class GitHubSelfUpdater(private val context: Context) {
             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
         }
 
-        context.startActivity(installIntent)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            if (!activity.packageManager.canRequestPackageInstalls()) {
+                val intent = Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES).apply {
+                    data = Uri.parse("package:${activity.packageName}")
+                }
+                activity.startActivity(intent)
+                return
+            }
+        }
+
+        activity.startActivity(installIntent)
     }
 
     fun dismissUpdate() {
