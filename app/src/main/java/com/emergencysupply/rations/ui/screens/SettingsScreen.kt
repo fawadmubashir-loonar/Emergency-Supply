@@ -2,6 +2,7 @@ package com.emergencysupply.rations.ui.screens
 
 import android.app.Activity
 import android.widget.Toast
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -27,6 +28,7 @@ import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.ErrorOutline
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material.icons.filled.OpenInBrowser
 import androidx.compose.material.icons.filled.People
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.SystemUpdate
@@ -58,15 +60,23 @@ import androidx.compose.ui.unit.sp
 import com.emergencysupply.rations.data.local.entity.HistoryLogEntry
 import com.emergencysupply.rations.data.repository.SyncState
 import com.emergencysupply.rations.ui.MainViewModel
+import com.emergencysupply.rations.ui.theme.BorderSlate
+import com.emergencysupply.rations.ui.theme.CardSurface
 import com.emergencysupply.rations.ui.theme.DangerRed
+import com.emergencysupply.rations.ui.theme.DangerSoft
 import com.emergencysupply.rations.ui.theme.DarkSlate
 import com.emergencysupply.rations.ui.theme.InfoBlue
+import com.emergencysupply.rations.ui.theme.InfoSoft
+import com.emergencysupply.rations.ui.theme.LightSlate
+import com.emergencysupply.rations.ui.theme.MediumSlate
 import com.emergencysupply.rations.ui.theme.MidnightSlate
 import com.emergencysupply.rations.ui.theme.SuccessGreen
+import com.emergencysupply.rations.ui.theme.SuccessSoft
 import com.emergencysupply.rations.ui.theme.TealAccent
 import com.emergencysupply.rations.ui.theme.TealPrimary
 import com.emergencysupply.rations.ui.theme.TealSoft
 import com.emergencysupply.rations.ui.theme.WarningAmber
+import com.emergencysupply.rations.ui.theme.WarningSoft
 import com.emergencysupply.rations.updater.UpdateStatus
 
 @Composable
@@ -86,94 +96,172 @@ fun SettingsScreen(
     LazyColumn(
         modifier = Modifier
             .fillMaxSize()
-            .padding(horizontal = 16.dp, vertical = 8.dp),
+            .padding(horizontal = 16.dp, vertical = 12.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
-        // 1. Google Account & Authorization Card
+        // 1. Google Account & Cloud Sync Card
         item {
             Card(
                 modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(14.dp),
-                colors = CardDefaults.cardColors(containerColor = Color.White),
+                shape = RoundedCornerShape(16.dp),
+                colors = CardDefaults.cardColors(containerColor = CardSurface),
+                border = BorderStroke(1.dp, BorderSlate),
                 elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
             ) {
-                Column(modifier = Modifier.padding(16.dp)) {
+                Column(modifier = Modifier.padding(18.dp)) {
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Text(
-                            text = "Google Account & Sync",
-                            fontSize = 15.sp,
+                            text = "Google Account & Sheets Sync",
+                            fontSize = 16.sp,
                             fontWeight = FontWeight.Bold,
                             color = MidnightSlate
                         )
                         Surface(
-                            shape = RoundedCornerShape(6.dp),
-                            color = if (currentAccount != null) TealSoft else Color(0xFFF1F5F9)
+                            shape = RoundedCornerShape(8.dp),
+                            color = if (currentAccount != null) SuccessSoft else Color(0xFFF1F5F9),
+                            border = BorderStroke(1.dp, if (currentAccount != null) SuccessGreen.copy(alpha = 0.3f) else BorderSlate)
                         ) {
                             Text(
-                                text = if (currentAccount != null) "AUTHORIZED" else "OFFLINE",
+                                text = if (currentAccount != null) "AUTHORIZED" else "DISCONNECTED",
                                 fontSize = 10.sp,
                                 fontWeight = FontWeight.Bold,
-                                color = if (currentAccount != null) TealPrimary else Color.Gray,
-                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
+                                color = if (currentAccount != null) SuccessGreen else MediumSlate,
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
                             )
                         }
                     }
 
-                    Spacer(modifier = Modifier.height(12.dp))
+                    Spacer(modifier = Modifier.height(14.dp))
 
                     if (currentAccount != null) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
-                            Icon(
-                                imageVector = Icons.Default.AccountCircle,
-                                contentDescription = null,
-                                modifier = Modifier.size(40.dp),
-                                tint = TealPrimary
-                            )
+                            Surface(
+                                shape = CircleShape,
+                                color = TealSoft,
+                                modifier = Modifier.size(44.dp)
+                            ) {
+                                Box(contentAlignment = Alignment.Center) {
+                                    Icon(
+                                        imageVector = Icons.Default.AccountCircle,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(32.dp),
+                                        tint = TealPrimary
+                                    )
+                                }
+                            }
                             Spacer(modifier = Modifier.width(12.dp))
                             Column {
                                 Text(
                                     text = currentAccount?.displayName ?: "Family User",
-                                    fontSize = 14.sp,
+                                    fontSize = 15.sp,
                                     fontWeight = FontWeight.Bold,
                                     color = MidnightSlate
                                 )
                                 Text(
                                     text = currentAccount?.email ?: "",
                                     fontSize = 12.sp,
-                                    color = Color.Gray
+                                    color = MediumSlate
+                                )
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(14.dp))
+
+                        // Target Spreadsheet display
+                        Surface(
+                            shape = RoundedCornerShape(10.dp),
+                            color = Color(0xFFF8FAFC),
+                            border = BorderStroke(1.dp, BorderSlate),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Column(modifier = Modifier.padding(12.dp)) {
+                                Text(text = "Target Google Spreadsheet ID", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = LightSlate)
+                                Spacer(modifier = Modifier.height(2.dp))
+                                Text(
+                                    text = "1xVml4dExwAzDCQGRYrxgGwNQMurEqRTq1Z6wLlLSrM4",
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = DarkSlate
                                 )
                             }
                         }
 
                         Spacer(modifier = Modifier.height(12.dp))
 
-                        OutlinedButton(
-                            onClick = onSignOutClick,
-                            modifier = Modifier.fillMaxWidth(),
-                            shape = RoundedCornerShape(8.dp)
-                        ) {
-                            Text("Sign Out", color = DangerRed)
+                        // Sync State Banner
+                        val statusText = when (syncState) {
+                            is SyncState.Idle -> "Status: Offline ready (idle)"
+                            is SyncState.Syncing -> "Status: Syncing two-way with Google Sheets..."
+                            is SyncState.Success -> "Status: Synced at ${(syncState as SyncState.Success).timestamp}"
+                            is SyncState.Error -> "Status: Sync error: ${(syncState as SyncState.Error).message}"
+                        }
+
+                        val statusColor = when (syncState) {
+                            is SyncState.Idle -> DarkSlate
+                            is SyncState.Syncing -> TealPrimary
+                            is SyncState.Success -> SuccessGreen
+                            is SyncState.Error -> DangerRed
+                        }
+
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            if (syncState is SyncState.Syncing) {
+                                CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp, color = TealPrimary)
+                                Spacer(modifier = Modifier.width(8.dp))
+                            } else if (syncState is SyncState.Success) {
+                                Icon(imageVector = Icons.Default.CloudDone, contentDescription = null, tint = SuccessGreen, modifier = Modifier.size(18.dp))
+                                Spacer(modifier = Modifier.width(8.dp))
+                            } else if (syncState is SyncState.Error) {
+                                Icon(imageVector = Icons.Default.ErrorOutline, contentDescription = null, tint = DangerRed, modifier = Modifier.size(18.dp))
+                                Spacer(modifier = Modifier.width(8.dp))
+                            }
+                            Text(text = statusText, fontSize = 12.sp, color = statusColor, fontWeight = FontWeight.Medium)
+                        }
+
+                        Spacer(modifier = Modifier.height(14.dp))
+
+                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                            Button(
+                                onClick = { viewModel.syncNow() },
+                                modifier = Modifier.weight(1.5f),
+                                enabled = syncState !is SyncState.Syncing,
+                                shape = RoundedCornerShape(10.dp),
+                                colors = ButtonDefaults.buttonColors(containerColor = TealPrimary)
+                            ) {
+                                Icon(imageVector = Icons.Default.CloudSync, contentDescription = null, modifier = Modifier.size(18.dp))
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text("Sync Now", fontWeight = FontWeight.Bold)
+                            }
+
+                            OutlinedButton(
+                                onClick = onSignOutClick,
+                                modifier = Modifier.weight(1f),
+                                shape = RoundedCornerShape(10.dp),
+                                border = BorderStroke(1.dp, DangerRed.copy(alpha = 0.4f))
+                            ) {
+                                Text("Sign Out", color = DangerRed, fontWeight = FontWeight.Bold)
+                            }
                         }
                     } else {
                         Text(
-                            text = "Sign in with an authorized family Google account that has permission on the household spreadsheet.",
-                            fontSize = 12.sp,
-                            color = Color.DarkGray
+                            text = "Sign in with an authorized Google account that has Editor access on the family spreadsheet.",
+                            fontSize = 13.sp,
+                            color = MediumSlate
                         )
 
                         if (!signInError.isNullOrBlank()) {
                             Spacer(modifier = Modifier.height(10.dp))
                             Surface(
-                                shape = RoundedCornerShape(8.dp),
-                                color = DangerRed.copy(alpha = 0.1f),
+                                shape = RoundedCornerShape(10.dp),
+                                color = DangerSoft,
+                                border = BorderStroke(1.dp, DangerRed.copy(alpha = 0.3f)),
                                 modifier = Modifier.fillMaxWidth()
                             ) {
                                 Row(
-                                    modifier = Modifier.padding(10.dp),
+                                    modifier = Modifier.padding(12.dp),
                                     verticalAlignment = Alignment.Top
                                 ) {
                                     Icon(
@@ -193,34 +281,34 @@ fun SettingsScreen(
                             }
                         }
 
-                        Spacer(modifier = Modifier.height(12.dp))
+                        Spacer(modifier = Modifier.height(14.dp))
+
                         Button(
                             onClick = onSignInClick,
                             modifier = Modifier.fillMaxWidth(),
-                            shape = RoundedCornerShape(10.dp),
+                            shape = RoundedCornerShape(12.dp),
                             colors = ButtonDefaults.buttonColors(containerColor = TealPrimary)
                         ) {
                             Icon(imageVector = Icons.Default.Lock, contentDescription = null, modifier = Modifier.size(18.dp))
                             Spacer(modifier = Modifier.width(8.dp))
-                            Text("Sign In with Google")
+                            Text("Sign In with Google", fontWeight = FontWeight.Bold)
                         }
 
                         Spacer(modifier = Modifier.height(14.dp))
-                        Divider(color = Color(0xFFF1F5F9))
+                        Divider(color = BorderSlate)
                         Spacer(modifier = Modifier.height(12.dp))
 
-                        // SHA-1 Helper Box for Google Cloud Console
                         Text(
-                            text = "⚙️ One-Time Google Cloud OAuth Setup",
+                            text = "⚙️ Google Cloud OAuth Setup Helper",
                             fontSize = 12.sp,
                             fontWeight = FontWeight.Bold,
                             color = MidnightSlate
                         )
                         Spacer(modifier = Modifier.height(4.dp))
                         Text(
-                            text = "Google Play Services requires registering your release SHA-1 certificate in Google Cloud Console under an Android OAuth 2.0 Client ID:",
+                            text = "Ensure your package name and SHA-1 certificate are added to Google Cloud Console:",
                             fontSize = 11.sp,
-                            color = Color.Gray
+                            color = LightSlate
                         )
                         Spacer(modifier = Modifier.height(8.dp))
 
@@ -234,7 +322,7 @@ fun SettingsScreen(
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Column {
-                                Text("Package Name", fontSize = 10.sp, color = Color.Gray)
+                                Text("Package Name", fontSize = 10.sp, color = LightSlate)
                                 Text("com.emergencysupply.rations", fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = DarkSlate)
                             }
                             IconButton(onClick = {
@@ -257,7 +345,7 @@ fun SettingsScreen(
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Column(modifier = Modifier.weight(1f)) {
-                                Text("Release SHA-1 Certificate", fontSize = 10.sp, color = Color.Gray)
+                                Text("Release SHA-1 Certificate", fontSize = 10.sp, color = LightSlate)
                                 Text(
                                     "4D:C5:68:1B:B8:7A:2F:77:AF:83:FD:BB:3C:7C:90:BF:60:A1:1F:6E",
                                     fontSize = 11.sp,
@@ -277,114 +365,38 @@ fun SettingsScreen(
             }
         }
 
-        // 2. Google Sheets Cloud Sync Card
+        // 2. In-App GitHub Releases Self-Updater Card
         item {
             Card(
                 modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(14.dp),
-                colors = CardDefaults.cardColors(containerColor = Color.White),
+                shape = RoundedCornerShape(16.dp),
+                colors = CardDefaults.cardColors(containerColor = CardSurface),
+                border = BorderStroke(1.dp, BorderSlate),
                 elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
             ) {
-                Column(modifier = Modifier.padding(16.dp)) {
-                    Text(
-                        text = "Google Sheets Sync Control",
-                        fontSize = 15.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = MidnightSlate
-                    )
-
-                    Spacer(modifier = Modifier.height(8.dp))
-
-                    Text(
-                        text = "Target Spreadsheet ID:",
-                        fontSize = 11.sp,
-                        color = Color.Gray
-                    )
-                    Text(
-                        text = "1xVml4dExwAzDCQGRYrxgGwNQMurEqRTq1Z6wLlLSrM4",
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.SemiBold,
-                        color = DarkSlate
-                    )
-
-                    Spacer(modifier = Modifier.height(12.dp))
-
-                    // Sync Status Indicator
-                    val statusText = when (syncState) {
-                        is SyncState.Idle -> "Status: Ready (idle)"
-                        is SyncState.Syncing -> "Status: Syncing with Google Sheets..."
-                        is SyncState.Success -> "Status: Synced successfully at ${(syncState as SyncState.Success).timestamp}"
-                        is SyncState.Error -> "Status: Sync error: ${(syncState as SyncState.Error).message}"
-                    }
-
-                    val statusColor = when (syncState) {
-                        is SyncState.Idle -> DarkSlate
-                        is SyncState.Syncing -> TealPrimary
-                        is SyncState.Success -> SuccessGreen
-                        is SyncState.Error -> DangerRed
-                    }
-
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        if (syncState is SyncState.Syncing) {
-                            CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp, color = TealPrimary)
-                            Spacer(modifier = Modifier.width(8.dp))
-                        } else if (syncState is SyncState.Success) {
-                            Icon(imageVector = Icons.Default.CloudDone, contentDescription = null, tint = SuccessGreen, modifier = Modifier.size(18.dp))
-                            Spacer(modifier = Modifier.width(8.dp))
-                        } else if (syncState is SyncState.Error) {
-                            Icon(imageVector = Icons.Default.ErrorOutline, contentDescription = null, tint = DangerRed, modifier = Modifier.size(18.dp))
-                            Spacer(modifier = Modifier.width(8.dp))
-                        }
-                        Text(text = statusText, fontSize = 12.sp, color = statusColor, fontWeight = FontWeight.Medium)
-                    }
-
-                    Spacer(modifier = Modifier.height(14.dp))
-
-                    Button(
-                        onClick = { viewModel.syncNow() },
-                        modifier = Modifier.fillMaxWidth(),
-                        enabled = currentAccount != null && syncState !is SyncState.Syncing,
-                        shape = RoundedCornerShape(10.dp),
-                        colors = ButtonDefaults.buttonColors(containerColor = DarkSlate)
-                    ) {
-                        Icon(imageVector = Icons.Default.CloudSync, contentDescription = null, modifier = Modifier.size(18.dp))
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text("Sync Now with Google Sheets")
-                    }
-                }
-            }
-        }
-
-        // 3. In-App GitHub Releases Self-Updater Card
-        item {
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(14.dp),
-                colors = CardDefaults.cardColors(containerColor = Color.White),
-                elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
-            ) {
-                Column(modifier = Modifier.padding(16.dp)) {
+                Column(modifier = Modifier.padding(18.dp)) {
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Text(
-                            text = "In-App GitHub Self-Updater",
-                            fontSize = 15.sp,
+                            text = "In-App App Updates",
+                            fontSize = 16.sp,
                             fontWeight = FontWeight.Bold,
                             color = MidnightSlate
                         )
                         Surface(
-                            shape = RoundedCornerShape(6.dp),
-                            color = Color(0xFFF1F5F9)
+                            shape = RoundedCornerShape(8.dp),
+                            color = TealSoft,
+                            border = BorderStroke(1.dp, TealPrimary.copy(alpha = 0.3f))
                         ) {
                             Text(
-                                text = "v1.0.0",
+                                text = "v1.0.3",
                                 fontSize = 11.sp,
                                 fontWeight = FontWeight.Bold,
-                                color = MidnightSlate,
-                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
+                                color = TealPrimary,
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
                             )
                         }
                     }
@@ -392,20 +404,21 @@ fun SettingsScreen(
                     Spacer(modifier = Modifier.height(8.dp))
 
                     Text(
-                        text = "Direct release channel from github.com/fawadmubashir-loonar/Emergency-Supply. Automatically downloads and installs APK updates.",
+                        text = "Connects directly to GitHub Releases (github.com/fawadmubashir-loonar/Emergency-Supply). Automatically downloads and installs updates.",
                         fontSize = 12.sp,
-                        color = Color.DarkGray
+                        color = MediumSlate
                     )
 
                     Spacer(modifier = Modifier.height(12.dp))
 
-                    // Progress bar if downloading
                     when (val state = updateStatus) {
                         is UpdateStatus.Downloading -> {
                             Column(modifier = Modifier.fillMaxWidth()) {
                                 LinearProgressIndicator(
-                                    progress = state.progress,
-                                    modifier = Modifier.fillMaxWidth().height(8.dp),
+                                    progress = { state.progress },
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .height(8.dp),
                                     color = TealPrimary
                                 )
                                 Spacer(modifier = Modifier.height(4.dp))
@@ -413,22 +426,23 @@ fun SettingsScreen(
                                     text = "Downloading APK: ${(state.progress * 100).toInt()}%",
                                     fontSize = 11.sp,
                                     color = TealPrimary,
-                                    fontWeight = FontWeight.SemiBold
+                                    fontWeight = FontWeight.Bold
                                 )
                             }
-                            Spacer(modifier = Modifier.height(8.dp))
+                            Spacer(modifier = Modifier.height(10.dp))
                         }
                         is UpdateStatus.Available -> {
                             val apkAsset = state.apkAsset
                             Surface(
-                                shape = RoundedCornerShape(8.dp),
+                                shape = RoundedCornerShape(10.dp),
                                 color = TealSoft,
+                                border = BorderStroke(1.dp, TealPrimary.copy(alpha = 0.3f)),
                                 modifier = Modifier.fillMaxWidth()
                             ) {
                                 Column(modifier = Modifier.padding(12.dp)) {
                                     Text(
-                                        text = "Update Available: ${state.release.tag_name}",
-                                        fontSize = 13.sp,
+                                        text = "Update Ready: ${state.release.tag_name}",
+                                        fontSize = 14.sp,
                                         fontWeight = FontWeight.Bold,
                                         color = TealPrimary
                                     )
@@ -437,28 +451,28 @@ fun SettingsScreen(
                                         Spacer(modifier = Modifier.height(4.dp))
                                         Text(text = notes, fontSize = 11.sp, color = DarkSlate)
                                     }
-                                    Spacer(modifier = Modifier.height(8.dp))
+                                    Spacer(modifier = Modifier.height(10.dp))
                                     if (context is Activity) {
                                         Button(
                                             onClick = { viewModel.startDownloadUpdate(context, apkAsset) },
                                             colors = ButtonDefaults.buttonColors(containerColor = TealPrimary),
                                             shape = RoundedCornerShape(8.dp)
                                         ) {
-                                            Text("Download & Install Update")
+                                            Text("Download & Install Now", fontWeight = FontWeight.Bold)
                                         }
                                     }
                                 }
                             }
-                            Spacer(modifier = Modifier.height(8.dp))
+                            Spacer(modifier = Modifier.height(10.dp))
                         }
                         is UpdateStatus.UpToDate -> {
                             Text(
-                                text = "App is running the latest release (v1.0.0)",
+                                text = "App is running the latest release (v1.0.3)",
                                 fontSize = 12.sp,
                                 color = SuccessGreen,
-                                fontWeight = FontWeight.Medium
+                                fontWeight = FontWeight.SemiBold
                             )
-                            Spacer(modifier = Modifier.height(8.dp))
+                            Spacer(modifier = Modifier.height(10.dp))
                         }
                         is UpdateStatus.Error -> {
                             Text(
@@ -466,7 +480,7 @@ fun SettingsScreen(
                                 fontSize = 12.sp,
                                 color = DangerRed
                             )
-                            Spacer(modifier = Modifier.height(8.dp))
+                            Spacer(modifier = Modifier.height(10.dp))
                         }
                         else -> {}
                     }
@@ -474,62 +488,64 @@ fun SettingsScreen(
                     OutlinedButton(
                         onClick = { viewModel.checkForUpdates(force = true) },
                         modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(10.dp)
+                        shape = RoundedCornerShape(10.dp),
+                        border = BorderStroke(1.dp, BorderSlate)
                     ) {
-                        Icon(imageVector = Icons.Default.SystemUpdate, contentDescription = null, modifier = Modifier.size(18.dp))
+                        Icon(imageVector = Icons.Default.SystemUpdate, contentDescription = null, modifier = Modifier.size(18.dp), tint = DarkSlate)
                         Spacer(modifier = Modifier.width(8.dp))
-                        Text("Check for Updates Now")
+                        Text("Check for Updates Now", fontWeight = FontWeight.SemiBold, color = DarkSlate)
                     }
                 }
             }
         }
 
-        // 4. Household Rations Setup Card
+        // 3. Household Rations Planning Card
         item {
             Card(
                 modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(14.dp),
-                colors = CardDefaults.cardColors(containerColor = Color.White),
+                shape = RoundedCornerShape(16.dp),
+                colors = CardDefaults.cardColors(containerColor = CardSurface),
+                border = BorderStroke(1.dp, BorderSlate),
                 elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
             ) {
-                Column(modifier = Modifier.padding(16.dp)) {
+                Column(modifier = Modifier.padding(18.dp)) {
                     Text(
                         text = "Household Planning Rules",
-                        fontSize = 15.sp,
+                        fontSize = 16.sp,
                         fontWeight = FontWeight.Bold,
                         color = MidnightSlate
                     )
-                    Spacer(modifier = Modifier.height(8.dp))
+                    Spacer(modifier = Modifier.height(10.dp))
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
-                            Icon(imageVector = Icons.Default.People, contentDescription = null, tint = DarkSlate)
+                            Icon(imageVector = Icons.Default.People, contentDescription = null, tint = TealPrimary)
                             Spacer(modifier = Modifier.width(8.dp))
                             Text("Household Members", fontSize = 13.sp, color = DarkSlate)
                         }
                         Text("5 Persons", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = MidnightSlate)
                     }
-                    Spacer(modifier = Modifier.height(6.dp))
+                    Spacer(modifier = Modifier.height(8.dp))
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Text("Target Daily Servings", fontSize = 13.sp, color = DarkSlate)
+                        Text("Daily Target Servings", fontSize = 13.sp, color = DarkSlate)
                         Text("15 servings / day (3 / person)", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = MidnightSlate)
                     }
                 }
             }
         }
 
-        // 5. Recent History Audit Log Card
+        // 4. Recent History Audit Log Card
         item {
             Text(
                 text = "Recent Activity Log",
-                fontSize = 15.sp,
+                fontSize = 16.sp,
                 fontWeight = FontWeight.Bold,
                 color = MidnightSlate
             )
@@ -539,52 +555,56 @@ fun SettingsScreen(
             item {
                 Card(
                     modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(12.dp),
-                    colors = CardDefaults.cardColors(containerColor = Color.White)
+                    shape = RoundedCornerShape(14.dp),
+                    colors = CardDefaults.cardColors(containerColor = CardSurface),
+                    border = BorderStroke(1.dp, BorderSlate)
                 ) {
                     Box(modifier = Modifier.padding(20.dp).fillMaxWidth(), contentAlignment = Alignment.Center) {
-                        Text(text = "No recent pantry stock changes logged.", color = Color.Gray, fontSize = 12.sp)
+                        Text(text = "No recent pantry stock changes logged yet.", color = LightSlate, fontSize = 12.sp)
                     }
                 }
             }
         } else {
             items(recentHistory, key = { it.id }) { log ->
-                HistoryItemCard(log = log)
+                ReformedHistoryItemCard(log = log)
             }
         }
 
-        item { Spacer(modifier = Modifier.height(32.dp)) }
+        item { Spacer(modifier = Modifier.height(36.dp)) }
     }
 }
 
 @Composable
-fun HistoryItemCard(log: HistoryLogEntry) {
+fun ReformedHistoryItemCard(log: HistoryLogEntry) {
     Card(
         modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(10.dp),
-        colors = CardDefaults.cardColors(containerColor = Color.White),
+        shape = RoundedCornerShape(12.dp),
+        colors = CardDefaults.cardColors(containerColor = CardSurface),
+        border = BorderStroke(1.dp, BorderSlate),
         elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
     ) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(12.dp),
+                .padding(14.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
             Column(modifier = Modifier.weight(1f)) {
                 Text(
                     text = log.itemName,
-                    fontSize = 13.sp,
+                    fontSize = 14.sp,
                     fontWeight = FontWeight.Bold,
                     color = MidnightSlate
                 )
+                Spacer(modifier = Modifier.height(2.dp))
                 Text(
                     text = "${log.action} • ${log.timestamp}",
                     fontSize = 11.sp,
-                    color = Color.Gray
+                    color = LightSlate
                 )
                 if (log.notes.isNotEmpty()) {
+                    Spacer(modifier = Modifier.height(2.dp))
                     Text(
                         text = log.notes,
                         fontSize = 11.sp,
@@ -594,8 +614,8 @@ fun HistoryItemCard(log: HistoryLogEntry) {
             }
 
             Surface(
-                shape = RoundedCornerShape(6.dp),
-                color = if (log.change >= 0) SuccessGreen.copy(alpha = 0.12f) else DangerRed.copy(alpha = 0.12f)
+                shape = RoundedCornerShape(8.dp),
+                color = if (log.change >= 0) SuccessSoft else DangerSoft
             ) {
                 Text(
                     text = (if (log.change > 0) "+%.0f" else "%.0f").format(log.change),

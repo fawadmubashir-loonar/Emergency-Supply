@@ -1,7 +1,9 @@
 package com.emergencysupply.rations.ui
 
 import android.app.Activity
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -25,6 +27,8 @@ import androidx.compose.material.icons.filled.ShoppingCart
 import androidx.compose.material.icons.filled.Sync
 import androidx.compose.material.icons.filled.SystemUpdate
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Badge
+import androidx.compose.material3.BadgedBox
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -57,15 +61,19 @@ import com.emergencysupply.rations.ui.screens.DashboardScreen
 import com.emergencysupply.rations.ui.screens.GroceriesScreen
 import com.emergencysupply.rations.ui.screens.InventoryScreen
 import com.emergencysupply.rations.ui.screens.SettingsScreen
-import com.emergencysupply.rations.ui.theme.BackgroundAlabaster
+import com.emergencysupply.rations.ui.theme.BackgroundSurface
+import com.emergencysupply.rations.ui.theme.BorderSlate
 import com.emergencysupply.rations.ui.theme.CardSurface
 import com.emergencysupply.rations.ui.theme.DangerRed
 import com.emergencysupply.rations.ui.theme.DarkSlate
+import com.emergencysupply.rations.ui.theme.MediumSlate
 import com.emergencysupply.rations.ui.theme.MidnightSlate
 import com.emergencysupply.rations.ui.theme.SuccessGreen
+import com.emergencysupply.rations.ui.theme.SuccessSoft
 import com.emergencysupply.rations.ui.theme.TealAccent
 import com.emergencysupply.rations.ui.theme.TealPrimary
 import com.emergencysupply.rations.ui.theme.TealSoft
+import com.emergencysupply.rations.ui.theme.WarningAmber
 import com.emergencysupply.rations.updater.UpdateStatus
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -78,53 +86,80 @@ fun MainScreen(
     val currentTab by viewModel.currentTab.collectAsState()
     val syncState by viewModel.syncState.collectAsState()
     val updateStatus by viewModel.updateStatus.collectAsState()
+    val groceries by viewModel.allGroceries.collectAsState()
+    val metrics by viewModel.dashboardMetrics.collectAsState()
     val context = LocalContext.current
+
+    val uncheckedGroceriesCount = groceries.count { !it.checked }
 
     Scaffold(
         topBar = {
             TopAppBar(
                 title = {
-                    Column {
-                        Text(
-                            text = "Emergency Rations",
-                            fontSize = 18.sp,
-                            fontWeight = FontWeight.ExtraBold,
-                            color = MidnightSlate
-                        )
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            val (dotColor, syncLabel) = when (syncState) {
-                                is SyncState.Syncing -> Pair(TealAccent, "Syncing...")
-                                is SyncState.Success -> Pair(SuccessGreen, "Synced")
-                                is SyncState.Error -> Pair(DangerRed, "Sync error")
-                                is SyncState.Idle -> Pair(Color.Gray, "Offline cache ready")
-                            }
-                            Box(
-                                modifier = Modifier
-                                    .size(6.dp)
-                                    .background(dotColor, CircleShape)
-                            )
-                            Spacer(modifier = Modifier.width(4.dp))
-                            Text(text = syncLabel, fontSize = 11.sp, color = Color.Gray)
-                        }
-                    }
-                },
-                actions = {
-                    IconButton(
-                        onClick = { viewModel.syncNow() },
-                        enabled = syncState !is SyncState.Syncing
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
-                        if (syncState is SyncState.Syncing) {
-                            CircularProgressIndicator(
-                                modifier = Modifier.size(20.dp),
-                                strokeWidth = 2.dp,
-                                color = TealPrimary
+                        Column {
+                            Text(
+                                text = "Emergency Rations",
+                                fontSize = 18.sp,
+                                fontWeight = FontWeight.ExtraBold,
+                                color = MidnightSlate,
+                                letterSpacing = (-0.3).sp
                             )
-                        } else {
-                            Icon(
-                                imageVector = Icons.Default.Sync,
-                                contentDescription = "Sync Now",
-                                tint = TealPrimary
-                            )
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                modifier = Modifier.padding(top = 1.dp)
+                            ) {
+                                val (dotColor, syncLabel) = when (syncState) {
+                                    is SyncState.Syncing -> Pair(TealAccent, "Syncing Sheets...")
+                                    is SyncState.Success -> Pair(SuccessGreen, "Live Synced")
+                                    is SyncState.Error -> Pair(DangerRed, "Sync Warning")
+                                    is SyncState.Idle -> Pair(MediumSlate, "Offline Ready")
+                                }
+                                Box(
+                                    modifier = Modifier
+                                        .size(7.dp)
+                                        .background(dotColor, CircleShape)
+                                )
+                                Spacer(modifier = Modifier.width(5.dp))
+                                Text(
+                                    text = syncLabel,
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Medium,
+                                    color = MediumSlate
+                                )
+                            }
+                        }
+
+                        // Right Action: Quick Sync Button with pill outline
+                        Surface(
+                            shape = RoundedCornerShape(20.dp),
+                            color = if (syncState is SyncState.Syncing) TealSoft else Color(0xFFF1F5F9),
+                            border = BorderStroke(1.dp, BorderSlate)
+                        ) {
+                            IconButton(
+                                onClick = { viewModel.syncNow() },
+                                enabled = syncState !is SyncState.Syncing,
+                                modifier = Modifier.size(36.dp)
+                            ) {
+                                if (syncState is SyncState.Syncing) {
+                                    CircularProgressIndicator(
+                                        modifier = Modifier.size(16.dp),
+                                        strokeWidth = 2.dp,
+                                        color = TealPrimary
+                                    )
+                                } else {
+                                    Icon(
+                                        imageVector = Icons.Default.Sync,
+                                        contentDescription = "Sync",
+                                        tint = TealPrimary,
+                                        modifier = Modifier.size(18.dp)
+                                    )
+                                }
+                            }
                         }
                     }
                 },
@@ -134,60 +169,103 @@ fun MainScreen(
             )
         },
         bottomBar = {
-            NavigationBar(
-                containerColor = CardSurface,
-                tonalElevation = 8.dp
+            Surface(
+                color = CardSurface,
+                border = BorderStroke(1.dp, BorderSlate),
+                tonalElevation = 2.dp
             ) {
-                NavigationBarItem(
-                    selected = currentTab == NavTab.DASHBOARD,
-                    onClick = { viewModel.currentTab.value = NavTab.DASHBOARD },
-                    icon = { Icon(Icons.Default.Dashboard, contentDescription = "Dashboard") },
-                    label = { Text("Dashboard", fontSize = 11.sp) },
-                    colors = NavigationBarItemDefaults.colors(
-                        selectedIconColor = TealPrimary,
-                        selectedTextColor = TealPrimary,
-                        indicatorColor = TealSoft
+                NavigationBar(
+                    containerColor = CardSurface,
+                    tonalElevation = 0.dp,
+                    modifier = Modifier.height(68.dp)
+                ) {
+                    // 1. Dashboard Tab
+                    NavigationBarItem(
+                        selected = currentTab == NavTab.DASHBOARD,
+                        onClick = { viewModel.currentTab.value = NavTab.DASHBOARD },
+                        icon = {
+                            if (metrics.restockNeededCount > 0) {
+                                BadgedBox(badge = {
+                                    Badge(containerColor = DangerRed) {
+                                        Text("${metrics.restockNeededCount}", fontSize = 10.sp, color = Color.White)
+                                    }
+                                }) {
+                                    Icon(Icons.Default.Dashboard, contentDescription = "Dashboard", modifier = Modifier.size(22.dp))
+                                }
+                            } else {
+                                Icon(Icons.Default.Dashboard, contentDescription = "Dashboard", modifier = Modifier.size(22.dp))
+                            }
+                        },
+                        label = { Text("Dashboard", fontSize = 11.sp, fontWeight = FontWeight.SemiBold) },
+                        colors = NavigationBarItemDefaults.colors(
+                            selectedIconColor = TealPrimary,
+                            selectedTextColor = TealPrimary,
+                            indicatorColor = TealSoft,
+                            unselectedIconColor = MediumSlate,
+                            unselectedTextColor = MediumSlate
+                        )
                     )
-                )
 
-                NavigationBarItem(
-                    selected = currentTab == NavTab.INVENTORY,
-                    onClick = { viewModel.currentTab.value = NavTab.INVENTORY },
-                    icon = { Icon(Icons.Default.Inventory2, contentDescription = "Inventory") },
-                    label = { Text("Inventory", fontSize = 11.sp) },
-                    colors = NavigationBarItemDefaults.colors(
-                        selectedIconColor = TealPrimary,
-                        selectedTextColor = TealPrimary,
-                        indicatorColor = TealSoft
+                    // 2. Inventory Tab
+                    NavigationBarItem(
+                        selected = currentTab == NavTab.INVENTORY,
+                        onClick = { viewModel.currentTab.value = NavTab.INVENTORY },
+                        icon = { Icon(Icons.Default.Inventory2, contentDescription = "Inventory", modifier = Modifier.size(22.dp)) },
+                        label = { Text("Inventory", fontSize = 11.sp, fontWeight = FontWeight.SemiBold) },
+                        colors = NavigationBarItemDefaults.colors(
+                            selectedIconColor = TealPrimary,
+                            selectedTextColor = TealPrimary,
+                            indicatorColor = TealSoft,
+                            unselectedIconColor = MediumSlate,
+                            unselectedTextColor = MediumSlate
+                        )
                     )
-                )
 
-                NavigationBarItem(
-                    selected = currentTab == NavTab.GROCERIES,
-                    onClick = { viewModel.currentTab.value = NavTab.GROCERIES },
-                    icon = { Icon(Icons.Default.ShoppingCart, contentDescription = "Groceries") },
-                    label = { Text("Groceries", fontSize = 11.sp) },
-                    colors = NavigationBarItemDefaults.colors(
-                        selectedIconColor = TealPrimary,
-                        selectedTextColor = TealPrimary,
-                        indicatorColor = TealSoft
+                    // 3. Groceries Tab with Unchecked Badge
+                    NavigationBarItem(
+                        selected = currentTab == NavTab.GROCERIES,
+                        onClick = { viewModel.currentTab.value = NavTab.GROCERIES },
+                        icon = {
+                            if (uncheckedGroceriesCount > 0) {
+                                BadgedBox(badge = {
+                                    Badge(containerColor = TealPrimary) {
+                                        Text("$uncheckedGroceriesCount", fontSize = 10.sp, color = Color.White)
+                                    }
+                                }) {
+                                    Icon(Icons.Default.ShoppingCart, contentDescription = "Groceries", modifier = Modifier.size(22.dp))
+                                }
+                            } else {
+                                Icon(Icons.Default.ShoppingCart, contentDescription = "Groceries", modifier = Modifier.size(22.dp))
+                            }
+                        },
+                        label = { Text("Groceries", fontSize = 11.sp, fontWeight = FontWeight.SemiBold) },
+                        colors = NavigationBarItemDefaults.colors(
+                            selectedIconColor = TealPrimary,
+                            selectedTextColor = TealPrimary,
+                            indicatorColor = TealSoft,
+                            unselectedIconColor = MediumSlate,
+                            unselectedTextColor = MediumSlate
+                        )
                     )
-                )
 
-                NavigationBarItem(
-                    selected = currentTab == NavTab.SETTINGS,
-                    onClick = { viewModel.currentTab.value = NavTab.SETTINGS },
-                    icon = { Icon(Icons.Default.Settings, contentDescription = "Settings") },
-                    label = { Text("Settings", fontSize = 11.sp) },
-                    colors = NavigationBarItemDefaults.colors(
-                        selectedIconColor = TealPrimary,
-                        selectedTextColor = TealPrimary,
-                        indicatorColor = TealSoft
+                    // 4. Settings Tab
+                    NavigationBarItem(
+                        selected = currentTab == NavTab.SETTINGS,
+                        onClick = { viewModel.currentTab.value = NavTab.SETTINGS },
+                        icon = { Icon(Icons.Default.Settings, contentDescription = "Settings", modifier = Modifier.size(22.dp)) },
+                        label = { Text("Settings", fontSize = 11.sp, fontWeight = FontWeight.SemiBold) },
+                        colors = NavigationBarItemDefaults.colors(
+                            selectedIconColor = TealPrimary,
+                            selectedTextColor = TealPrimary,
+                            indicatorColor = TealSoft,
+                            unselectedIconColor = MediumSlate,
+                            unselectedTextColor = MediumSlate
+                        )
                     )
-                )
+                }
             }
         },
-        containerColor = BackgroundAlabaster
+        containerColor = BackgroundSurface
     ) { innerPadding ->
         Box(
             modifier = Modifier
@@ -207,7 +285,7 @@ fun MainScreen(
         }
     }
 
-    // In-App Update Dialog when release is detected
+    // In-App Update Prompt Dialog
     if (updateStatus is UpdateStatus.Available) {
         val updateAvailable = updateStatus as UpdateStatus.Available
         val release = updateAvailable.release
@@ -215,36 +293,55 @@ fun MainScreen(
 
         AlertDialog(
             onDismissRequest = { viewModel.dismissUpdate() },
+            shape = RoundedCornerShape(16.dp),
+            containerColor = Color.White,
             icon = {
-                Icon(
-                    imageVector = Icons.Default.SystemUpdate,
-                    contentDescription = null,
-                    tint = TealPrimary,
-                    modifier = Modifier.size(32.dp)
-                )
+                Surface(
+                    shape = CircleShape,
+                    color = TealSoft,
+                    modifier = Modifier.size(48.dp)
+                ) {
+                    Box(contentAlignment = Alignment.Center) {
+                        Icon(
+                            imageVector = Icons.Default.SystemUpdate,
+                            contentDescription = null,
+                            tint = TealPrimary,
+                            modifier = Modifier.size(24.dp)
+                        )
+                    }
+                }
             },
             title = {
                 Text(
-                    text = "Update Available: ${release.tag_name}",
+                    text = "Update Available (${release.tag_name})",
                     fontWeight = FontWeight.Bold,
+                    fontSize = 17.sp,
                     color = MidnightSlate
                 )
             },
             text = {
                 Column {
                     Text(
-                        text = "A new release of Emergency Rations is ready to install.",
+                        text = "A new improved version of Emergency Rations is ready to install.",
                         fontSize = 13.sp,
                         color = DarkSlate
                     )
                     val notes = release.body
                     if (!notes.isNullOrBlank()) {
-                        Spacer(modifier = Modifier.height(8.dp))
-                        Text(
-                            text = notes,
-                            fontSize = 12.sp,
-                            color = Color.Gray
-                        )
+                        Spacer(modifier = Modifier.height(10.dp))
+                        Surface(
+                            shape = RoundedCornerShape(8.dp),
+                            color = Color(0xFFF8FAFC),
+                            border = BorderStroke(1.dp, BorderSlate),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text(
+                                text = notes,
+                                fontSize = 11.sp,
+                                color = MediumSlate,
+                                modifier = Modifier.padding(10.dp)
+                            )
+                        }
                     }
                 }
             },
@@ -255,14 +352,15 @@ fun MainScreen(
                             viewModel.startDownloadUpdate(context, apkAsset)
                         }
                     },
-                    colors = ButtonDefaults.buttonColors(containerColor = TealPrimary)
+                    colors = ButtonDefaults.buttonColors(containerColor = TealPrimary),
+                    shape = RoundedCornerShape(10.dp)
                 ) {
-                    Text("Download & Install")
+                    Text("Download & Install", fontWeight = FontWeight.Bold)
                 }
             },
             dismissButton = {
                 TextButton(onClick = { viewModel.dismissUpdate() }) {
-                    Text("Later", color = Color.Gray)
+                    Text("Later", color = MediumSlate)
                 }
             }
         )

@@ -12,13 +12,16 @@ private val LightColorScheme = lightColorScheme(
     onPrimaryContainer = TealPrimary,
     secondary = DarkSlate,
     onSecondary = Color.White,
-    background = BackgroundAlabaster,
+    secondaryContainer = Color(0xFFF1F5F9),
+    onSecondaryContainer = DarkSlate,
+    background = BackgroundSurface,
     onBackground = MidnightSlate,
     surface = CardSurface,
     onSurface = MidnightSlate,
-    surfaceVariant = Color(0xFFF1F5F9),
-    onSurfaceVariant = LightSlate,
-    outline = Color(0xFFE2E8F0)
+    surfaceVariant = Color(0xFFF8FAFC),
+    onSurfaceVariant = MediumSlate,
+    outline = BorderSlate,
+    outlineVariant = Color(0xFFF1F5F9)
 )
 
 @Composable

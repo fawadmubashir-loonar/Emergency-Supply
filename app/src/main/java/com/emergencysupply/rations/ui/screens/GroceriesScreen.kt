@@ -1,5 +1,6 @@
 package com.emergencysupply.rations.ui.screens
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -60,11 +61,17 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.emergencysupply.rations.data.local.entity.GroceryItem
 import com.emergencysupply.rations.ui.MainViewModel
+import com.emergencysupply.rations.ui.theme.BorderSlate
+import com.emergencysupply.rations.ui.theme.CardSurface
 import com.emergencysupply.rations.ui.theme.DangerRed
+import com.emergencysupply.rations.ui.theme.DangerSoft
 import com.emergencysupply.rations.ui.theme.DarkSlate
-import com.emergencysupply.rations.ui.theme.InfoBlue
+import com.emergencysupply.rations.ui.theme.LightSlate
+import com.emergencysupply.rations.ui.theme.MediumSlate
 import com.emergencysupply.rations.ui.theme.MidnightSlate
+import com.emergencysupply.rations.ui.theme.MutedSlate
 import com.emergencysupply.rations.ui.theme.SuccessGreen
+import com.emergencysupply.rations.ui.theme.SuccessSoft
 import com.emergencysupply.rations.ui.theme.TealAccent
 import com.emergencysupply.rations.ui.theme.TealPrimary
 import com.emergencysupply.rations.ui.theme.TealSoft
@@ -100,18 +107,19 @@ fun GroceriesScreen(viewModel: MainViewModel) {
         item {
             Card(
                 modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(14.dp),
-                colors = CardDefaults.cardColors(containerColor = Color.White),
+                shape = RoundedCornerShape(16.dp),
+                colors = CardDefaults.cardColors(containerColor = CardSurface),
+                border = BorderStroke(1.dp, BorderSlate),
                 elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
             ) {
                 Column(modifier = Modifier.padding(14.dp)) {
                     Text(
-                        text = "Quick Add to Grocery Checklist",
+                        text = "Quick Add to Shopping List",
                         fontSize = 14.sp,
                         fontWeight = FontWeight.Bold,
                         color = MidnightSlate
                     )
-                    Spacer(modifier = Modifier.height(8.dp))
+                    Spacer(modifier = Modifier.height(10.dp))
 
                     Row(
                         modifier = Modifier.fillMaxWidth(),
@@ -121,13 +129,15 @@ fun GroceriesScreen(viewModel: MainViewModel) {
                         OutlinedTextField(
                             value = newName,
                             onValueChange = { newName = it },
-                            placeholder = { Text("Item Name (e.g. Rice, Tuna)...", fontSize = 13.sp) },
+                            placeholder = { Text("Add item (e.g. Tuna, Basmati Rice)...", fontSize = 13.sp, color = LightSlate) },
                             singleLine = true,
                             modifier = Modifier.weight(1.8f),
-                            shape = RoundedCornerShape(10.dp),
+                            shape = RoundedCornerShape(12.dp),
                             colors = OutlinedTextFieldDefaults.colors(
                                 focusedBorderColor = TealPrimary,
-                                unfocusedBorderColor = Color(0xFFCBD5E1)
+                                unfocusedBorderColor = BorderSlate,
+                                focusedContainerColor = Color(0xFFF8FAFC),
+                                unfocusedContainerColor = Color(0xFFF8FAFC)
                             )
                         )
 
@@ -138,10 +148,12 @@ fun GroceriesScreen(viewModel: MainViewModel) {
                             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                             singleLine = true,
                             modifier = Modifier.weight(0.7f),
-                            shape = RoundedCornerShape(10.dp),
+                            shape = RoundedCornerShape(12.dp),
                             colors = OutlinedTextFieldDefaults.colors(
                                 focusedBorderColor = TealPrimary,
-                                unfocusedBorderColor = Color(0xFFCBD5E1)
+                                unfocusedBorderColor = BorderSlate,
+                                focusedContainerColor = Color(0xFFF8FAFC),
+                                unfocusedContainerColor = Color(0xFFF8FAFC)
                             )
                         )
 
@@ -161,15 +173,15 @@ fun GroceriesScreen(viewModel: MainViewModel) {
                                 }
                             },
                             modifier = Modifier.height(52.dp),
-                            shape = RoundedCornerShape(10.dp),
+                            shape = RoundedCornerShape(12.dp),
                             colors = ButtonDefaults.buttonColors(containerColor = TealPrimary),
                             enabled = newName.isNotBlank()
                         ) {
-                            Icon(imageVector = Icons.Default.Add, contentDescription = "Add")
+                            Icon(imageVector = Icons.Default.Add, contentDescription = "Add", modifier = Modifier.size(20.dp))
                         }
                     }
 
-                    Spacer(modifier = Modifier.height(8.dp))
+                    Spacer(modifier = Modifier.height(10.dp))
 
                     // Store selection for Quick Add
                     Row(
@@ -177,21 +189,22 @@ fun GroceriesScreen(viewModel: MainViewModel) {
                         horizontalArrangement = Arrangement.spacedBy(6.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Text(text = "Target Store:", fontSize = 11.sp, color = Color.Gray)
+                        Text(text = "Target:", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = MediumSlate)
                         val storeQuickList = listOf("Grocery Store", "Costco", "Halal Market", "Target")
                         storeQuickList.forEach { s ->
                             val isSel = (if (selectedStore != "All Stores") selectedStore else newStore).equals(s, ignoreCase = true)
                             Surface(
-                                shape = RoundedCornerShape(6.dp),
-                                color = if (isSel) TealPrimary else Color(0xFFF1F5F9),
+                                shape = RoundedCornerShape(8.dp),
+                                color = if (isSel) TealSoft else Color(0xFFF1F5F9),
+                                border = BorderStroke(1.dp, if (isSel) TealPrimary else BorderSlate),
                                 modifier = Modifier.clickable { newStore = s }
                             ) {
                                 Text(
                                     text = s,
                                     fontSize = 10.sp,
-                                    fontWeight = FontWeight.Medium,
-                                    color = if (isSel) Color.White else DarkSlate,
-                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 3.dp)
+                                    fontWeight = if (isSel) FontWeight.Bold else FontWeight.Medium,
+                                    color = if (isSel) TealPrimary else DarkSlate,
+                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
                                 )
                             }
                         }
@@ -207,16 +220,26 @@ fun GroceriesScreen(viewModel: MainViewModel) {
                 horizontalArrangement = Arrangement.spacedBy(6.dp)
             ) {
                 items(storeOptions) { store ->
+                    val isSelected = selectedStore.equals(store, ignoreCase = true)
+                    val storeItemCount = if (store == "All Stores") groceries.size else groceries.count { it.store.equals(store, ignoreCase = true) }
                     FilterChip(
-                        selected = selectedStore.equals(store, ignoreCase = true),
+                        selected = isSelected,
                         onClick = { viewModel.groceryStoreFilter.value = store },
-                        label = { Text(store, fontSize = 12.sp) },
+                        label = {
+                            Text(
+                                text = if (storeItemCount > 0) "$store ($storeItemCount)" else store,
+                                fontSize = 12.sp,
+                                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium
+                            )
+                        },
+                        shape = RoundedCornerShape(20.dp),
                         colors = FilterChipDefaults.filterChipColors(
                             selectedContainerColor = DarkSlate,
                             selectedLabelColor = Color.White,
-                            containerColor = Color.White,
+                            containerColor = CardSurface,
                             labelColor = DarkSlate
-                        )
+                        ),
+                        border = BorderStroke(1.dp, if (isSelected) DarkSlate else BorderSlate)
                     )
                 }
             }
@@ -230,9 +253,9 @@ fun GroceriesScreen(viewModel: MainViewModel) {
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
-                    text = "$uncheckedCount to buy (${checkedCount} checked)",
+                    text = "$uncheckedCount remaining to buy ($checkedCount completed)",
                     fontSize = 13.sp,
-                    fontWeight = FontWeight.SemiBold,
+                    fontWeight = FontWeight.Bold,
                     color = MidnightSlate
                 )
 
@@ -240,11 +263,12 @@ fun GroceriesScreen(viewModel: MainViewModel) {
                     OutlinedButton(
                         onClick = { viewModel.clearCheckedGroceries() },
                         shape = RoundedCornerShape(8.dp),
-                        colors = ButtonDefaults.outlinedButtonColors(contentColor = DangerRed)
+                        border = BorderStroke(1.dp, DangerRed.copy(alpha = 0.4f)),
+                        colors = ButtonDefaults.outlinedButtonColors(containerColor = DangerSoft)
                     ) {
-                        Icon(imageVector = Icons.Default.DeleteSweep, contentDescription = null, modifier = Modifier.size(16.dp))
+                        Icon(imageVector = Icons.Default.DeleteSweep, contentDescription = null, modifier = Modifier.size(16.dp), tint = DangerRed)
                         Spacer(modifier = Modifier.width(4.dp))
-                        Text(text = "Clear Checked", fontSize = 12.sp)
+                        Text(text = "Clear Checked ($checkedCount)", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = DangerRed)
                     }
                 }
             }
@@ -253,25 +277,47 @@ fun GroceriesScreen(viewModel: MainViewModel) {
         // 4. Grouped Items Checklist
         if (filteredGroceries.isEmpty()) {
             item {
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(top = 32.dp),
-                    contentAlignment = Alignment.Center
+                Surface(
+                    shape = RoundedCornerShape(14.dp),
+                    color = CardSurface,
+                    border = BorderStroke(1.dp, BorderSlate),
+                    modifier = Modifier.fillMaxWidth()
                 ) {
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Icon(
-                            imageVector = Icons.Default.ShoppingCart,
-                            contentDescription = null,
-                            modifier = Modifier.size(48.dp),
-                            tint = Color.LightGray
-                        )
-                        Spacer(modifier = Modifier.height(8.dp))
-                        Text(
-                            text = "Grocery list is empty! Restock alerts appear here.",
-                            fontSize = 13.sp,
-                            color = Color.Gray
-                        )
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 36.dp, horizontal = 20.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Surface(
+                                shape = CircleShape,
+                                color = TealSoft,
+                                modifier = Modifier.size(52.dp)
+                            ) {
+                                Box(contentAlignment = Alignment.Center) {
+                                    Icon(
+                                        imageVector = Icons.Default.ShoppingCart,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(24.dp),
+                                        tint = TealPrimary
+                                    )
+                                }
+                            }
+                            Spacer(modifier = Modifier.height(10.dp))
+                            Text(
+                                text = "Shopping list is all clear! 🎉",
+                                fontSize = 15.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = MidnightSlate
+                            )
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Text(
+                                text = "Restock items added from Dashboard appear here automatically.",
+                                fontSize = 12.sp,
+                                color = MediumSlate
+                            )
+                        }
                     }
                 }
             }
@@ -280,17 +326,34 @@ fun GroceriesScreen(viewModel: MainViewModel) {
             val byStore = filteredGroceries.groupBy { it.store }
             byStore.forEach { (store, itemsInStore) ->
                 item {
-                    Text(
-                        text = "📍 $store",
-                        fontSize = 14.sp,
-                        fontWeight = FontWeight.ExtraBold,
-                        color = TealPrimary,
-                        modifier = Modifier.padding(top = 8.dp)
-                    )
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.padding(top = 6.dp)
+                    ) {
+                        Surface(
+                            shape = RoundedCornerShape(6.dp),
+                            color = TealSoft,
+                            border = BorderStroke(1.dp, TealPrimary.copy(alpha = 0.3f))
+                        ) {
+                            Text(
+                                text = "📍 $store",
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = TealPrimary,
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
+                            )
+                        }
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = "${itemsInStore.size} items",
+                            fontSize = 11.sp,
+                            color = LightSlate
+                        )
+                    }
                 }
 
                 items(itemsInStore, key = { it.id }) { item ->
-                    GroceryItemCard(
+                    ReformedGroceryItemCard(
                         item = item,
                         onToggleChecked = { viewModel.toggleGroceryChecked(item.id, !item.checked) },
                         onToggleFavorite = { viewModel.toggleGroceryFavorite(item.id, !item.favorite) },
@@ -300,12 +363,12 @@ fun GroceriesScreen(viewModel: MainViewModel) {
             }
         }
 
-        item { Spacer(modifier = Modifier.height(32.dp)) }
+        item { Spacer(modifier = Modifier.height(36.dp)) }
     }
 }
 
 @Composable
-fun GroceryItemCard(
+fun ReformedGroceryItemCard(
     item: GroceryItem,
     onToggleChecked: () -> Unit,
     onToggleFavorite: () -> Unit,
@@ -313,16 +376,17 @@ fun GroceryItemCard(
 ) {
     Card(
         modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(10.dp),
+        shape = RoundedCornerShape(12.dp),
         colors = CardDefaults.cardColors(
-            containerColor = if (item.checked) Color(0xFFF8FAFC) else Color.White
+            containerColor = if (item.checked) Color(0xFFF8FAFC) else CardSurface
         ),
+        border = BorderStroke(1.dp, if (item.checked) BorderSlate else BorderSlate),
         elevation = CardDefaults.cardElevation(defaultElevation = if (item.checked) 0.dp else 1.dp)
     ) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(8.dp),
+                .padding(horizontal = 12.dp, vertical = 10.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             Checkbox(
@@ -330,9 +394,12 @@ fun GroceryItemCard(
                 onCheckedChange = { onToggleChecked() },
                 colors = CheckboxDefaults.colors(
                     checkedColor = TealPrimary,
-                    uncheckedColor = Color.Gray
-                )
+                    uncheckedColor = MediumSlate
+                ),
+                modifier = Modifier.size(24.dp)
             )
+
+            Spacer(modifier = Modifier.width(10.dp))
 
             Column(
                 modifier = Modifier
@@ -341,43 +408,45 @@ fun GroceryItemCard(
             ) {
                 Text(
                     text = item.name,
-                    fontSize = 14.sp,
+                    fontSize = 15.sp,
                     fontWeight = FontWeight.SemiBold,
-                    color = if (item.checked) Color.Gray else MidnightSlate,
+                    color = if (item.checked) LightSlate else MidnightSlate,
                     textDecoration = if (item.checked) TextDecoration.LineThrough else TextDecoration.None
                 )
+                Spacer(modifier = Modifier.height(2.dp))
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(
                         text = "Qty: %.0f %s".format(item.qty, item.unit),
                         fontSize = 12.sp,
-                        color = if (item.checked) Color.LightGray else DarkSlate
+                        fontWeight = FontWeight.Medium,
+                        color = if (item.checked) MutedSlate else DarkSlate
                     )
                     if (item.aisle.isNotEmpty() && item.aisle != "General") {
                         Text(
                             text = " • ${item.aisle}",
                             fontSize = 11.sp,
-                            color = TealAccent
+                            color = TealPrimary
                         )
                     }
                 }
             }
 
             // Favorite star
-            IconButton(onClick = onToggleFavorite) {
+            IconButton(onClick = onToggleFavorite, modifier = Modifier.size(32.dp)) {
                 Icon(
                     imageVector = if (item.favorite) Icons.Default.Star else Icons.Outlined.StarOutline,
                     contentDescription = "Favorite",
-                    tint = if (item.favorite) WarningAmber else Color.LightGray,
+                    tint = if (item.favorite) WarningAmber else LightSlate,
                     modifier = Modifier.size(20.dp)
                 )
             }
 
             // Delete
-            IconButton(onClick = onDelete) {
+            IconButton(onClick = onDelete, modifier = Modifier.size(32.dp)) {
                 Icon(
                     imageVector = Icons.Default.Delete,
                     contentDescription = "Delete",
-                    tint = Color.LightGray,
+                    tint = LightSlate,
                     modifier = Modifier.size(18.dp)
                 )
             }
