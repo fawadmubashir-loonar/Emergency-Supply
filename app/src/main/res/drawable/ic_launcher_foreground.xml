@@ -1,19 +1,74 @@
-<?xml version="1.0" encoding="utf-8"?>
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:aapt="http://schemas.android.com/aapt"
     android:width="108dp"
     android:height="108dp"
     android:viewportWidth="108"
     android:viewportHeight="108">
     <path
-        android:fillColor="#0F172A"
-        android:pathData="M0,0h108v108h-108z"/>
+        android:pathData="M0,0h108v108h-108z">
+        <aapt:attr name="android:fillColor">
+            <gradient
+                android:startX="0"
+                android:startY="0"
+                android:endX="108"
+                android:endY="108"
+                android:type="linear">
+                <item android:offset="0.0" android:color="#0B1329" />
+                <item android:offset="1.0" android:color="#020617" />
+            </gradient>
+        </aapt:attr>
+    </path>
+    <!-- Emerald Protective Shield -->
     <path
-        android:fillColor="#0D9488"
-        android:pathData="M54,20L84,36V72L54,88L24,72V36L54,20Z"/>
+        android:pathData="M54,18 L84,32 C84,62 54,86 54,88 C54,86 24,62 24,32 Z">
+        <aapt:attr name="android:fillColor">
+            <gradient
+                android:startX="24"
+                android:startY="18"
+                android:endX="84"
+                android:endY="88"
+                android:type="linear">
+                <item android:offset="0.0" android:color="#10B981" />
+                <item android:offset="1.0" android:color="#047857" />
+            </gradient>
+        </aapt:attr>
+    </path>
+    <!-- Golden Vault Outer Ring -->
     <path
-        android:fillColor="#FFFFFF"
-        android:pathData="M48,42h12v24h-12z"/>
+        android:strokeWidth="4"
+        android:pathData="M54,32 A18,18 0 1,1 53.9,32">
+        <aapt:attr name="android:strokeColor">
+            <gradient
+                android:startX="36"
+                android:startY="32"
+                android:endX="72"
+                android:endY="68"
+                android:type="linear">
+                <item android:offset="0.0" android:color="#FBBF24" />
+                <item android:offset="1.0" android:color="#D97706" />
+            </gradient>
+        </aapt:attr>
+    </path>
+    <!-- White Security Cross Arms -->
     <path
-        android:fillColor="#FFFFFF"
-        android:pathData="M42,48h24v12h-24z"/>
+        android:fillColor="#00000000"
+        android:strokeColor="#FFFFFF"
+        android:strokeWidth="3.5"
+        android:strokeLineCap="round"
+        android:pathData="M54,38 L54,62 M42,50 L66,50" />
+    <!-- Golden Vault Core Center -->
+    <path
+        android:pathData="M54,46 A4,4 0 1,1 53.9,46">
+        <aapt:attr name="android:fillColor">
+            <gradient
+                android:startX="50"
+                android:startY="46"
+                android:endX="58"
+                android:endY="54"
+                android:type="linear">
+                <item android:offset="0.0" android:color="#FBBF24" />
+                <item android:offset="1.0" android:color="#D97706" />
+            </gradient>
+        </aapt:attr>
+    </path>
 </vector>
