@@ -35,6 +35,7 @@ import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.FilterList
 import androidx.compose.material.icons.filled.LocationOn
+import androidx.compose.material.icons.filled.QrCodeScanner
 import androidx.compose.material.icons.filled.Remove
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.AlertDialog
@@ -76,10 +77,14 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.emergencysupply.rations.data.BundleCatalog
 import com.emergencysupply.rations.data.PreplannedCatalog
+import com.emergencysupply.rations.data.SupplyBundle
+import com.emergencysupply.rations.data.remote.ScannedProductInfo
 import com.emergencysupply.rations.data.local.entity.InventoryItem
 import com.emergencysupply.rations.ui.GroupSummary
 import com.emergencysupply.rations.ui.MainViewModel
+import com.emergencysupply.rations.ui.components.BarcodeScannerSheet
 import com.emergencysupply.rations.ui.components.ScrollableMultiWheelPicker
 import com.emergencysupply.rations.ui.components.ScrollableWheelDatePicker
 import com.emergencysupply.rations.ui.components.WheelColumnSpec
@@ -136,6 +141,10 @@ fun InventoryScreen(viewModel: MainViewModel) {
     val isCategoryHub = selectedCategory == "All" && searchQuery.isBlank() && !lowStockOnly && !expiringOnly && selectedLocation == "All"
 
     var showAddSheet by remember { mutableStateOf(false) }
+    var showBarcodeScanner by remember { mutableStateOf(false) }
+    var scannedPrefill by remember { mutableStateOf<ScannedProductInfo?>(null) }
+    var showBundlesSheet by remember { mutableStateOf(false) }
+    val isScanningLookup by viewModel.isScanningLookup.collectAsState()
     var editingItem by remember { mutableStateOf<InventoryItem?>(null) }
     var showNewCategoryPrompt by remember { mutableStateOf(false) }
     var showNewLocationPrompt by remember { mutableStateOf(false) }
@@ -197,6 +206,18 @@ fun InventoryScreen(viewModel: MainViewModel) {
                     ),
                     modifier = Modifier.weight(1f)
                 )
+                IconButton(
+                    onClick = { showBarcodeScanner = true },
+                    modifier = Modifier.size(36.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.QrCodeScanner,
+                        contentDescription = "Scan Barcode",
+                        tint = EmeraldDeep,
+                        modifier = Modifier.size(20.dp)
+                    )
+                }
+                Spacer(modifier = Modifier.width(4.dp))
                 Button(
                     onClick = { showAddSheet = true },
                     shape = RoundedCornerShape(20.dp),
@@ -208,6 +229,15 @@ fun InventoryScreen(viewModel: MainViewModel) {
                     Text("Add", fontSize = 12.sp, fontWeight = FontWeight.Bold)
                 }
             }
+        }
+
+        if (isScanningLookup) {
+            Spacer(modifier = Modifier.height(4.dp))
+            LinearProgressIndicator(
+                modifier = Modifier.fillMaxWidth().height(3.dp),
+                color = EmeraldDeep,
+                trackColor = EmeraldDeep.copy(alpha = 0.2f)
+            )
         }
 
         Spacer(modifier = Modifier.height(10.dp))
@@ -227,18 +257,34 @@ fun InventoryScreen(viewModel: MainViewModel) {
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Text(
-                            text = "Pantry Categories",
-                            fontSize = 16.sp,
-                            fontWeight = FontWeight.ExtraBold,
-                            color = MidnightSlate
-                        )
-                        Text(
-                            text = "${mergedCategories.size} categories • ${allInventory.size} items",
-                            fontSize = 11.sp,
-                            fontWeight = FontWeight.SemiBold,
-                            color = MediumSlate
-                        )
+                        Column {
+                            Text(
+                                text = "Pantry Categories",
+                                fontSize = 16.sp,
+                                fontWeight = FontWeight.ExtraBold,
+                                color = MidnightSlate
+                            )
+                            Text(
+                                text = "${mergedCategories.size} categories • ${allInventory.size} items",
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                color = MediumSlate
+                            )
+                        }
+                        Surface(
+                            shape = RoundedCornerShape(16.dp),
+                            color = CobaltSoft,
+                            border = BorderStroke(1.dp, CobaltBlue.copy(alpha = 0.3f)),
+                            modifier = Modifier.clickable { showBundlesSheet = true }
+                        ) {
+                            Text(
+                                text = "🎒 Kits & Bundles",
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = CobaltBlue,
+                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
+                            )
+                        }
                     }
                 }
 
@@ -668,6 +714,45 @@ fun InventoryScreen(viewModel: MainViewModel) {
         }
     }
 
+    if (showBarcodeScanner) {
+        BarcodeScannerSheet(
+            onDismiss = { showBarcodeScanner = false },
+            onBarcodeDetected = { barcode ->
+                showBarcodeScanner = false
+                viewModel.lookupBarcode(barcode) { info ->
+                    if (info != null) {
+                        scannedPrefill = info
+                        showAddSheet = true
+                    } else {
+                        scannedPrefill = ScannedProductInfo(
+                            barcode = barcode,
+                            name = "",
+                            category = PreplannedCatalog.defaultCategoryNames.first(),
+                            unit = "packs",
+                            notes = "Barcode: $barcode"
+                        )
+                        showAddSheet = true
+                        Toast.makeText(context, "Barcode $barcode scanned — enter details", Toast.LENGTH_SHORT).show()
+                    }
+                }
+            }
+        )
+    }
+
+    if (showBundlesSheet) {
+        SupplyBundlesSheet(
+            onDismiss = { showBundlesSheet = false },
+            onAddToPantry = { bundle ->
+                viewModel.addBundleToPantry(bundle)
+                Toast.makeText(context, "Added ${bundle.title} items to Pantry", Toast.LENGTH_SHORT).show()
+            },
+            onAddToGroceries = { bundle ->
+                viewModel.addBundleToGroceries(bundle)
+                Toast.makeText(context, "Added ${bundle.title} items to Groceries", Toast.LENGTH_SHORT).show()
+            }
+        )
+    }
+
     if (showAddSheet) {
         val initialCat = if (selectedCategory != "All") selectedCategory else null
         PreplannedAndCustomAddSheet(
@@ -676,13 +761,22 @@ fun InventoryScreen(viewModel: MainViewModel) {
             availableLocations = availableLocations,
             onCreateCategory = { viewModel.addCustomCategory(it) },
             onCreateLocation = { viewModel.addCustomLocation(it) },
-            onDismiss = { showAddSheet = false },
+            onDismiss = {
+                showAddSheet = false
+                scannedPrefill = null
+            },
             onConfirm = { newItem ->
                 viewModel.addNewItem(newItem)
                 Toast.makeText(context, "Added ${newItem.name} to ${newItem.location}", Toast.LENGTH_SHORT).show()
                 showAddSheet = false
+                scannedPrefill = null
             },
-            initialCategory = initialCat
+            initialCategory = initialCat,
+            initialScannedProduct = scannedPrefill,
+            onOpenBundles = {
+                showAddSheet = false
+                showBundlesSheet = true
+            }
         )
     }
 
@@ -1075,23 +1169,46 @@ fun PreplannedAndCustomAddSheet(
     onCreateLocation: (String) -> Unit,
     onDismiss: () -> Unit,
     onConfirm: (InventoryItem) -> Unit,
-    initialCategory: String? = null
+    initialCategory: String? = null,
+    initialScannedProduct: ScannedProductInfo? = null,
+    onOpenBundles: (() -> Unit)? = null
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
-    var selectedTab by remember { mutableStateOf(0) }
+    var selectedTab by remember(initialScannedProduct) { mutableStateOf(if (initialScannedProduct != null) 1 else 0) }
     var catalogSearch by remember { mutableStateOf("") }
     var catalogCatFilter by remember(initialCategory) { mutableStateOf(initialCategory ?: "All") }
     var destinationArea by remember { mutableStateOf("Auto") }
 
-    var name by remember { mutableStateOf("") }
-    var category by remember(initialCategory) { mutableStateOf(initialCategory ?: availableCategories.firstOrNull() ?: "Grains & Pasta") }
-    var unit by remember { mutableStateOf("lbs") }
+    var name by remember(initialScannedProduct) { mutableStateOf(initialScannedProduct?.name ?: "") }
+    var category by remember(initialCategory, initialScannedProduct) {
+        mutableStateOf(
+            initialScannedProduct?.category?.takeIf { it.isNotBlank() }
+                ?: initialCategory
+                ?: availableCategories.firstOrNull()
+                ?: "Grains & Pasta"
+        )
+    }
+    var unit by remember(initialScannedProduct) {
+        mutableStateOf(
+            initialScannedProduct?.unit?.takeIf { it.isNotBlank() } ?: "lbs"
+        )
+    }
     var location by remember { mutableStateOf(availableLocations.firstOrNull() ?: "Main Pantry") }
-    var initialQtyStr by remember { mutableStateOf("6") }
+    var initialQtyStr by remember(initialScannedProduct) {
+        mutableStateOf(
+            initialScannedProduct?.defaultQty?.let {
+                if (it % 1.0 == 0.0) "%.0f".format(it) else "$it"
+            } ?: "6"
+        )
+    }
     var parLevelStr by remember { mutableStateOf("12") }
     var earliestExpiry by remember { mutableStateOf(LocalDate.now().plusYears(1).format(DateTimeFormatter.ISO_LOCAL_DATE)) }
     var servingsStr by remember { mutableStateOf("4") }
-    var notes by remember { mutableStateOf("") }
+    var notes by remember(initialScannedProduct) {
+        mutableStateOf(
+            initialScannedProduct?.notes ?: ""
+        )
+    }
 
     var showNewCatDialog by remember { mutableStateOf(false) }
     var showNewLocDialog by remember { mutableStateOf(false) }
@@ -1111,7 +1228,35 @@ fun PreplannedAndCustomAddSheet(
                 .padding(horizontal = 20.dp)
                 .padding(bottom = 24.dp)
         ) {
-            Text("Add Rations & Household Items", fontWeight = FontWeight.ExtraBold, fontSize = 19.sp, color = MidnightSlate)
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = "Add Rations & Household Items",
+                    fontWeight = FontWeight.ExtraBold,
+                    fontSize = 17.sp,
+                    color = MidnightSlate,
+                    modifier = Modifier.weight(1f)
+                )
+                if (onOpenBundles != null) {
+                    Surface(
+                        shape = RoundedCornerShape(14.dp),
+                        color = PeachSoft,
+                        border = BorderStroke(1.dp, OrangeAccent.copy(alpha = 0.4f)),
+                        modifier = Modifier.clickable { onOpenBundles() }
+                    ) {
+                        Text(
+                            text = "🎒 Kits & Bundles",
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = OrangeAccent,
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 5.dp)
+                        )
+                    }
+                }
+            }
             Spacer(modifier = Modifier.height(10.dp))
 
             TabRow(
@@ -2138,4 +2283,200 @@ fun QuickNameDialog(
             TextButton(onClick = onDismiss) { Text("Cancel") }
         }
     )
+}
+
+/**
+ * Feature 5: Emergency Kits & Recipe Bundles Sheet
+ * Displays pre-assembled survival & family rations packages from BundleCatalog.
+ * Allows one-tap adding either directly into the Pantry or into House Groceries checklist.
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun SupplyBundlesSheet(
+    onDismiss: () -> Unit,
+    onAddToPantry: (SupplyBundle) -> Unit,
+    onAddToGroceries: (SupplyBundle) -> Unit
+) {
+    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    val bundles = remember { BundleCatalog.allBundles }
+
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        sheetState = sheetState,
+        containerColor = CardSurface,
+        shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp)
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .navigationBarsPadding()
+                .padding(horizontal = 20.dp)
+                .padding(bottom = 24.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = "🎒 Emergency Kits & Bundles",
+                        fontWeight = FontWeight.ExtraBold,
+                        fontSize = 19.sp,
+                        color = MidnightSlate
+                    )
+                    Text(
+                        text = "One-tap multi-item ration packages & grocery lists",
+                        fontSize = 12.sp,
+                        color = MediumSlate
+                    )
+                }
+                IconButton(onClick = onDismiss) {
+                    Icon(Icons.Default.Clear, contentDescription = "Close", tint = DarkSlate)
+                }
+            }
+
+            Spacer(modifier = Modifier.height(14.dp))
+
+            LazyColumn(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(max = 520.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                items(bundles, key = { it.id }) { bundle ->
+                    Surface(
+                        shape = RoundedCornerShape(18.dp),
+                        color = SoftTileSurface,
+                        border = BorderStroke(1.dp, BorderSlate),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(14.dp)
+                        ) {
+                            // Header: Icon + Title + Subtitle
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Surface(
+                                    shape = RoundedCornerShape(14.dp),
+                                    color = PeachSoft,
+                                    modifier = Modifier.size(44.dp)
+                                ) {
+                                    Box(contentAlignment = Alignment.Center) {
+                                        Text(bundle.icon, fontSize = 22.sp)
+                                    }
+                                }
+                                Spacer(modifier = Modifier.width(12.dp))
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(
+                                        text = bundle.title,
+                                        fontSize = 14.sp,
+                                        fontWeight = FontWeight.ExtraBold,
+                                        color = MidnightSlate
+                                    )
+                                    Text(
+                                        text = bundle.subtitle,
+                                        fontSize = 11.sp,
+                                        color = MediumSlate,
+                                        lineHeight = 15.sp
+                                    )
+                                }
+                            }
+
+                            Spacer(modifier = Modifier.height(10.dp))
+
+                            // Itemized preview chips
+                            Text(
+                                text = "Included items (${bundle.items.size}):",
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                color = DarkSlate
+                            )
+                            Spacer(modifier = Modifier.height(6.dp))
+
+                            LazyRow(
+                                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                items(bundle.items) { item ->
+                                    val qtyFormatted = if (item.qty % 1.0 == 0.0) "%.0f".format(item.qty) else "${item.qty}"
+                                    Surface(
+                                        shape = RoundedCornerShape(10.dp),
+                                        color = CardSurface,
+                                        border = BorderStroke(1.dp, BorderSlate)
+                                    ) {
+                                        Row(
+                                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            Text(
+                                                text = "${item.name} ($qtyFormatted ${item.unit})",
+                                                fontSize = 10.sp,
+                                                fontWeight = FontWeight.Medium,
+                                                color = MidnightSlate
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+
+                            Spacer(modifier = Modifier.height(12.dp))
+
+                            // Action buttons: "Add to Pantry" and "+ Groceries"
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                Button(
+                                    onClick = { onAddToPantry(bundle) },
+                                    shape = RoundedCornerShape(12.dp),
+                                    colors = ButtonDefaults.buttonColors(containerColor = InkBlack),
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .height(38.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Add,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(15.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Text(
+                                        text = "Add to Pantry",
+                                        fontSize = 11.sp,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                }
+
+                                Button(
+                                    onClick = { onAddToGroceries(bundle) },
+                                    shape = RoundedCornerShape(12.dp),
+                                    colors = ButtonDefaults.buttonColors(containerColor = CobaltBlue),
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .height(38.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.AddShoppingCart,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(15.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Text(
+                                        text = "+ Groceries",
+                                        fontSize = 11.sp,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
 }

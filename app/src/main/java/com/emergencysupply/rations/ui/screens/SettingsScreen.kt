@@ -1,7 +1,13 @@
 package com.emergencysupply.rations.ui.screens
 
+import android.Manifest
 import android.app.Activity
+import android.content.Intent
+import android.content.pm.PackageManager
+import android.os.Build
 import android.widget.Toast
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -26,10 +32,13 @@ import androidx.compose.material.icons.filled.AccountCircle
 import androidx.compose.material.icons.filled.CloudDone
 import androidx.compose.material.icons.filled.CloudSync
 import androidx.compose.material.icons.filled.ContentCopy
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.ErrorOutline
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material.icons.filled.NotificationsActive
 import androidx.compose.material.icons.filled.People
+import androidx.compose.material.icons.filled.PictureAsPdf
 import androidx.compose.material.icons.filled.Restaurant
 import androidx.compose.material.icons.filled.SystemUpdate
 import androidx.compose.material.icons.filled.TrackChanges
@@ -45,8 +54,11 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Switch
+import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -63,10 +75,15 @@ import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.core.content.ContextCompat
 import com.emergencysupply.rations.BuildConfig
 import com.emergencysupply.rations.data.local.entity.HistoryLogEntry
 import com.emergencysupply.rations.data.repository.SyncState
+import com.emergencysupply.rations.export.PantryExportManager
+import com.emergencysupply.rations.notifications.ExpiryReminderWorker
 import com.emergencysupply.rations.ui.MainViewModel
+import com.emergencysupply.rations.ui.components.ScrollableMultiWheelPicker
+import com.emergencysupply.rations.ui.components.WheelColumnSpec
 import com.emergencysupply.rations.ui.components.dashedBorder
 import com.emergencysupply.rations.ui.theme.BorderSlate
 import com.emergencysupply.rations.ui.theme.CardSurface
@@ -109,16 +126,41 @@ fun SettingsScreen(
     val recentHistory by viewModel.recentHistory.collectAsState()
     val signInError by viewModel.signInError.collectAsState()
     val appSettings by viewModel.settings.collectAsState()
+    val allInventory by viewModel.allInventory.collectAsState()
+    val metrics by viewModel.dashboardMetrics.collectAsState()
     val clipboardManager = LocalClipboardManager.current
 
     var selectedTab by rememberSaveable { mutableStateOf(SettingsSubTab.SETTINGS) }
     var selectedFilter by rememberSaveable { mutableStateOf("All") }
     var oauthDetailsExpanded by rememberSaveable { mutableStateOf(false) }
 
+    LaunchedEffect(selectedTab) {
+        if (selectedTab == SettingsSubTab.ACTIVITY) {
+            viewModel.refreshHistoryIfNeeded()
+        }
+    }
+
     val household = appSettings?.householdSize ?: 5
     val targetYears = appSettings?.targetYears ?: 2.0
     val lowStockPct = appSettings?.lowStockPct ?: 40
     val useSoonDays = appSettings?.useSoonDays ?: 90
+
+    var editingTargets by remember { mutableStateOf(false) }
+    var editHousehold by remember(household) { mutableStateOf(household) }
+    var editYears by remember(targetYears) { mutableStateOf(targetYears) }
+    var editLowPct by remember(lowStockPct) { mutableStateOf(lowStockPct) }
+    var editExpiryDays by remember(useSoonDays) { mutableStateOf(useSoonDays) }
+
+    var alertsEnabled by remember { mutableStateOf(ExpiryReminderWorker.isScheduled(context)) }
+    val notifPermLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+        if (granted) {
+            ExpiryReminderWorker.scheduleDailyCheck(context)
+            alertsEnabled = true
+            Toast.makeText(context, "Daily expiry alerts enabled", Toast.LENGTH_SHORT).show()
+        } else {
+            Toast.makeText(context, "Notification permission needed", Toast.LENGTH_SHORT).show()
+        }
+    }
 
     val filteredHistory = remember(recentHistory, selectedFilter) {
         if (selectedFilter == "All") {
@@ -617,55 +659,410 @@ fun SettingsScreen(
                                         Text("Household Targets & Alerts", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = MidnightSlate)
                                     }
 
-                                    Surface(shape = RoundedCornerShape(10.dp), color = PeachSoft) {
-                                        Text(
-                                            text = "$household Persons",
-                                            fontSize = 11.sp,
-                                            fontWeight = FontWeight.Bold,
-                                            color = OrangeAccent,
-                                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
-                                        )
+                                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                        Surface(
+                                            shape = RoundedCornerShape(10.dp),
+                                            color = if (editingTargets) DangerSoft else PeachSoft,
+                                            modifier = Modifier.clickable {
+                                                if (editingTargets) {
+                                                    editHousehold = household
+                                                    editYears = targetYears
+                                                    editLowPct = lowStockPct
+                                                    editExpiryDays = useSoonDays
+                                                    editingTargets = false
+                                                } else {
+                                                    editingTargets = true
+                                                }
+                                            }
+                                        ) {
+                                            Row(
+                                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                                                verticalAlignment = Alignment.CenterVertically,
+                                                horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                            ) {
+                                                if (!editingTargets) {
+                                                    Icon(Icons.Default.Edit, contentDescription = null, modifier = Modifier.size(12.dp), tint = OrangeAccent)
+                                                }
+                                                Text(
+                                                    text = if (editingTargets) "Cancel" else "Edit",
+                                                    fontSize = 11.sp,
+                                                    fontWeight = FontWeight.Bold,
+                                                    color = if (editingTargets) DangerRed else OrangeAccent
+                                                )
+                                            }
+                                        }
+
+                                        Surface(shape = RoundedCornerShape(10.dp), color = PeachSoft) {
+                                            Text(
+                                                text = if (editingTargets) "$editHousehold Pers" else "$household Persons",
+                                                fontSize = 11.sp,
+                                                fontWeight = FontWeight.Bold,
+                                                color = OrangeAccent,
+                                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                                            )
+                                        }
                                     }
                                 }
 
                                 Spacer(modifier = Modifier.height(14.dp))
 
-                                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                                    HouseholdSettingRow(
-                                        icon = Icons.Default.People,
-                                        iconTint = OrangeAccent,
-                                        iconBg = PeachSoft,
-                                        label = "Household Size",
-                                        value = "$household Persons"
+                                if (editingTargets) {
+                                    val householdItems = remember { (1..20).map { it.toString() } }
+                                    val reserveGoalItems = remember { listOf("0.5", "1.0", "1.5", "2.0", "2.5", "3.0", "4.0", "5.0") }
+                                    val lowStockItems = remember { (20..80 step 5).map { it.toString() } }
+                                    val expiryAlertItems = remember { listOf("14", "30", "60", "90", "120", "180") }
+
+                                    val selectedHousehold = editHousehold.coerceIn(1, 20).toString()
+                                    val selectedYears = String.format(java.util.Locale.US, "%.1f", editYears).let {
+                                        if (it in reserveGoalItems) it else "2.0"
+                                    }
+                                    val selectedLowPct = editLowPct.let { pct ->
+                                        val rounded = ((pct + 2) / 5) * 5
+                                        rounded.coerceIn(20, 80).toString()
+                                    }
+                                    val selectedExpiryDays = editExpiryDays.let { days ->
+                                        if (days.toString() in expiryAlertItems) days.toString() else "90"
+                                    }
+
+                                    ScrollableMultiWheelPicker(
+                                        columns = listOf(
+                                            WheelColumnSpec(
+                                                label = "Household",
+                                                items = householdItems,
+                                                selected = selectedHousehold,
+                                                weight = 1.1f,
+                                                displayTransform = { "$it P" },
+                                                onSelected = { it.toIntOrNull()?.let { v -> editHousehold = v } }
+                                            ),
+                                            WheelColumnSpec(
+                                                label = "Reserve",
+                                                items = reserveGoalItems,
+                                                selected = selectedYears,
+                                                weight = 1f,
+                                                displayTransform = { "$it yr" },
+                                                onSelected = { it.toDoubleOrNull()?.let { v -> editYears = v } }
+                                            ),
+                                            WheelColumnSpec(
+                                                label = "Low Alert",
+                                                items = lowStockItems,
+                                                selected = selectedLowPct,
+                                                weight = 1f,
+                                                displayTransform = { "$it%" },
+                                                onSelected = { it.toIntOrNull()?.let { v -> editLowPct = v } }
+                                            ),
+                                            WheelColumnSpec(
+                                                label = "Expiry",
+                                                items = expiryAlertItems,
+                                                selected = selectedExpiryDays,
+                                                weight = 1.1f,
+                                                displayTransform = { "$it d" },
+                                                onSelected = { it.toIntOrNull()?.let { v -> editExpiryDays = v } }
+                                            )
+                                        ),
+                                        height = 140.dp
                                     )
-                                    HouseholdSettingRow(
-                                        icon = Icons.Default.Restaurant,
-                                        iconTint = EmeraldVibrant,
-                                        iconBg = TealSoft,
-                                        label = "Daily Target",
-                                        value = "${household * 3} servings / day"
-                                    )
-                                    HouseholdSettingRow(
-                                        icon = Icons.Default.TrackChanges,
-                                        iconTint = CobaltBlue,
-                                        iconBg = CobaltSoft,
-                                        label = "Reserve Goal",
-                                        value = "${targetYears} yrs"
-                                    )
-                                    HouseholdSettingRow(
-                                        icon = Icons.Default.Warning,
-                                        iconTint = WarningAmber,
-                                        iconBg = WarningSoft,
-                                        label = "Low Stock Alert",
-                                        value = "<${lowStockPct}%"
-                                    )
-                                    HouseholdSettingRow(
-                                        icon = Icons.Default.AccessTime,
-                                        iconTint = DangerRed,
-                                        iconBg = DangerSoft,
-                                        label = "Expiry Alert",
-                                        value = "<${useSoonDays} days"
-                                    )
+
+                                    Spacer(modifier = Modifier.height(10.dp))
+
+                                    Surface(
+                                        shape = RoundedCornerShape(12.dp),
+                                        color = SoftTileSurface,
+                                        border = BorderStroke(1.dp, BorderSlate),
+                                        modifier = Modifier.fillMaxWidth()
+                                    ) {
+                                        Row(
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .padding(horizontal = 12.dp, vertical = 8.dp),
+                                            horizontalArrangement = Arrangement.SpaceBetween,
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            Text(
+                                                text = "Target: $editHousehold persons • ${editHousehold * 3} serv/day • ${editYears}y reserve • Low <$editLowPct% • Exp <$editExpiryDays d",
+                                                fontSize = 11.sp,
+                                                fontWeight = FontWeight.Medium,
+                                                color = DarkSlate
+                                            )
+                                        }
+                                    }
+
+                                    Spacer(modifier = Modifier.height(12.dp))
+
+                                    Button(
+                                        onClick = {
+                                            viewModel.updateHouseholdSettings(editHousehold, editYears, editLowPct, editExpiryDays)
+                                            editingTargets = false
+                                            Toast.makeText(context, "Household targets saved & syncing", Toast.LENGTH_SHORT).show()
+                                        },
+                                        modifier = Modifier.fillMaxWidth().height(46.dp),
+                                        shape = RoundedCornerShape(12.dp),
+                                        colors = ButtonDefaults.buttonColors(containerColor = InkBlack)
+                                    ) {
+                                        Icon(Icons.Default.CloudSync, contentDescription = null, modifier = Modifier.size(18.dp), tint = Color.White)
+                                        Spacer(modifier = Modifier.width(8.dp))
+                                        Text("Save Targets & Sync", fontWeight = FontWeight.Bold, color = Color.White)
+                                    }
+                                } else {
+                                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                        HouseholdSettingRow(
+                                            icon = Icons.Default.People,
+                                            iconTint = OrangeAccent,
+                                            iconBg = PeachSoft,
+                                            label = "Household Size",
+                                            value = "$household Persons"
+                                        )
+                                        HouseholdSettingRow(
+                                            icon = Icons.Default.Restaurant,
+                                            iconTint = EmeraldVibrant,
+                                            iconBg = TealSoft,
+                                            label = "Daily Target",
+                                            value = "${household * 3} servings / day"
+                                        )
+                                        HouseholdSettingRow(
+                                            icon = Icons.Default.TrackChanges,
+                                            iconTint = CobaltBlue,
+                                            iconBg = CobaltSoft,
+                                            label = "Reserve Goal",
+                                            value = "${targetYears} yrs"
+                                        )
+                                        HouseholdSettingRow(
+                                            icon = Icons.Default.Warning,
+                                            iconTint = WarningAmber,
+                                            iconBg = WarningSoft,
+                                            label = "Low Stock Alert",
+                                            value = "<${lowStockPct}%"
+                                        )
+                                        HouseholdSettingRow(
+                                            icon = Icons.Default.AccessTime,
+                                            iconTint = DangerRed,
+                                            iconBg = DangerSoft,
+                                            label = "Expiry Alert",
+                                            value = "<${useSoonDays} days"
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    // 4. Daily Expiry Reminders Card
+                    item {
+                        Card(
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(22.dp),
+                            colors = CardDefaults.cardColors(containerColor = CardSurface),
+                            border = BorderStroke(1.dp, BorderSlate),
+                            elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+                        ) {
+                            Column(modifier = Modifier.padding(18.dp)) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Surface(
+                                            shape = RoundedCornerShape(10.dp),
+                                            color = TealSoft,
+                                            modifier = Modifier.size(34.dp)
+                                        ) {
+                                            Box(contentAlignment = Alignment.Center) {
+                                                Icon(
+                                                    Icons.Default.NotificationsActive,
+                                                    contentDescription = null,
+                                                    tint = EmeraldVibrant,
+                                                    modifier = Modifier.size(18.dp)
+                                                )
+                                            }
+                                        }
+                                        Spacer(modifier = Modifier.width(10.dp))
+                                        Text("Daily Expiry Reminders", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = MidnightSlate)
+                                    }
+
+                                    Surface(
+                                        shape = RoundedCornerShape(10.dp),
+                                        color = if (alertsEnabled) SuccessSoft else SoftTileSurface
+                                    ) {
+                                        Text(
+                                            text = if (alertsEnabled) "ACTIVE" else "OFF",
+                                            fontSize = 11.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            color = if (alertsEnabled) SuccessGreen else LightSlate,
+                                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                                        )
+                                    }
+                                }
+
+                                Spacer(modifier = Modifier.height(10.dp))
+
+                                Text(
+                                    text = "Automated daily background check for expired and expiring items at 8:00 AM.",
+                                    fontSize = 12.sp,
+                                    color = MediumSlate
+                                )
+
+                                Spacer(modifier = Modifier.height(14.dp))
+
+                                Surface(
+                                    shape = RoundedCornerShape(12.dp),
+                                    color = SoftTileSurface,
+                                    border = BorderStroke(1.dp, BorderSlate),
+                                    modifier = Modifier.fillMaxWidth()
+                                ) {
+                                    Row(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(horizontal = 14.dp, vertical = 8.dp),
+                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Column(modifier = Modifier.weight(1f)) {
+                                            Text(
+                                                text = "Daily Background Check",
+                                                fontSize = 13.sp,
+                                                fontWeight = FontWeight.SemiBold,
+                                                color = DarkSlate
+                                            )
+                                            Spacer(modifier = Modifier.height(2.dp))
+                                            Text(
+                                                text = if (alertsEnabled) "Scheduled via Android WorkManager" else "Notifications disabled",
+                                                fontSize = 11.sp,
+                                                color = LightSlate
+                                            )
+                                        }
+
+                                        Switch(
+                                            checked = alertsEnabled,
+                                            onCheckedChange = { checked ->
+                                                if (checked) {
+                                                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+                                                        ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
+                                                    ) {
+                                                        notifPermLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+                                                    } else {
+                                                        ExpiryReminderWorker.scheduleDailyCheck(context)
+                                                        alertsEnabled = true
+                                                        Toast.makeText(context, "Daily expiry alerts enabled", Toast.LENGTH_SHORT).show()
+                                                    }
+                                                } else {
+                                                    ExpiryReminderWorker.cancelDailyCheck(context)
+                                                    alertsEnabled = false
+                                                    Toast.makeText(context, "Daily expiry alerts disabled", Toast.LENGTH_SHORT).show()
+                                                }
+                                            },
+                                            colors = SwitchDefaults.colors(
+                                                checkedThumbColor = Color.White,
+                                                checkedTrackColor = EmeraldVibrant
+                                            )
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    // 5. Offline Emergency Printout Card
+                    item {
+                        Card(
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(22.dp),
+                            colors = CardDefaults.cardColors(containerColor = CardSurface),
+                            border = BorderStroke(1.dp, BorderSlate),
+                            elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+                        ) {
+                            Column(modifier = Modifier.padding(18.dp)) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Surface(
+                                            shape = RoundedCornerShape(10.dp),
+                                            color = CobaltSoft,
+                                            modifier = Modifier.size(34.dp)
+                                        ) {
+                                            Box(contentAlignment = Alignment.Center) {
+                                                Icon(
+                                                    Icons.Default.PictureAsPdf,
+                                                    contentDescription = null,
+                                                    tint = CobaltBlue,
+                                                    modifier = Modifier.size(18.dp)
+                                                )
+                                            }
+                                        }
+                                        Spacer(modifier = Modifier.width(10.dp))
+                                        Text("Offline Emergency Printout", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = MidnightSlate)
+                                    }
+
+                                    Surface(shape = RoundedCornerShape(10.dp), color = CobaltSoft) {
+                                        Text(
+                                            text = "OFFLINE READY",
+                                            fontSize = 10.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            color = CobaltBlue,
+                                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                                        )
+                                    }
+                                }
+
+                                Spacer(modifier = Modifier.height(10.dp))
+
+                                Text(
+                                    text = "Generate printable emergency stock sheets or spreadsheet CSV exports to keep in your disaster binder or survival kit.",
+                                    fontSize = 12.sp,
+                                    color = MediumSlate
+                                )
+
+                                Spacer(modifier = Modifier.height(14.dp))
+
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                                ) {
+                                    Button(
+                                        onClick = {
+                                            val uri = PantryExportManager.exportPantryPdf(context, allInventory, metrics)
+                                            if (uri != null) {
+                                                val intent = Intent(Intent.ACTION_SEND).apply {
+                                                    type = "application/pdf"
+                                                    putExtra(Intent.EXTRA_STREAM, uri)
+                                                    addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                                                }
+                                                context.startActivity(Intent.createChooser(intent, "Share Emergency Printable PDF"))
+                                            } else {
+                                                Toast.makeText(context, "Could not generate PDF export", Toast.LENGTH_SHORT).show()
+                                            }
+                                        },
+                                        modifier = Modifier.weight(1.3f).height(46.dp),
+                                        shape = RoundedCornerShape(12.dp),
+                                        colors = ButtonDefaults.buttonColors(containerColor = InkBlack)
+                                    ) {
+                                        Icon(Icons.Default.PictureAsPdf, contentDescription = null, modifier = Modifier.size(18.dp), tint = Color.White)
+                                        Spacer(modifier = Modifier.width(6.dp))
+                                        Text("Export Printable PDF", fontWeight = FontWeight.Bold, fontSize = 12.sp, color = Color.White)
+                                    }
+
+                                    OutlinedButton(
+                                        onClick = {
+                                            val uri = PantryExportManager.exportPantryCsv(context, allInventory)
+                                            if (uri != null) {
+                                                val intent = Intent(Intent.ACTION_SEND).apply {
+                                                    type = "text/csv"
+                                                    putExtra(Intent.EXTRA_STREAM, uri)
+                                                    addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                                                }
+                                                context.startActivity(Intent.createChooser(intent, "Share Pantry Inventory CSV"))
+                                            } else {
+                                                Toast.makeText(context, "Could not generate CSV export", Toast.LENGTH_SHORT).show()
+                                            }
+                                        },
+                                        modifier = Modifier.weight(1f).height(46.dp),
+                                        shape = RoundedCornerShape(12.dp),
+                                        border = BorderStroke(1.dp, BorderSlate)
+                                    ) {
+                                        Text("Export CSV", fontWeight = FontWeight.SemiBold, fontSize = 12.sp, color = DarkSlate)
+                                    }
                                 }
                             }
                         }

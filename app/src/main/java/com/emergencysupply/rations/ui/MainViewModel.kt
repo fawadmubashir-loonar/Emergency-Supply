@@ -4,12 +4,16 @@ import android.app.Activity
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
+import com.emergencysupply.rations.data.BundleCatalog
 import com.emergencysupply.rations.data.PreplannedCatalog
+import com.emergencysupply.rations.data.SupplyBundle
 import com.emergencysupply.rations.data.auth.GoogleAuthManager
 import com.emergencysupply.rations.data.local.entity.AppSettingsEntity
 import com.emergencysupply.rations.data.local.entity.GroceryItem
 import com.emergencysupply.rations.data.local.entity.HistoryLogEntry
 import com.emergencysupply.rations.data.local.entity.InventoryItem
+import com.emergencysupply.rations.data.remote.BarcodeLookupService
+import com.emergencysupply.rations.data.remote.ScannedProductInfo
 import com.emergencysupply.rations.data.repository.RationsRepository
 import com.emergencysupply.rations.data.repository.SyncState
 import com.emergencysupply.rations.updater.GitHubAsset
@@ -61,6 +65,9 @@ class MainViewModel(
     val updateStatus: StateFlow<UpdateStatus> = updater.status
     val currentAccount: StateFlow<GoogleSignInAccount?> = authManager.currentAccount
     val signInError = MutableStateFlow<String?>(null)
+
+    private val barcodeLookupService = BarcodeLookupService()
+    val isScanningLookup = MutableStateFlow(false)
 
     fun setSignInError(error: String?) {
         signInError.value = error
@@ -280,16 +287,62 @@ class MainViewModel(
                 val account = currentAccount.value
                 if (isForeground.value && account != null && syncState.value !is SyncState.Syncing) {
                     lastForegroundSyncMs = System.currentTimeMillis()
-                    repository.syncWithGoogleSheets(account)
+                    repository.syncWithGoogleSheets(account, includeHistory = false)
                 }
             }
         }
     }
 
-    fun syncNow() {
+    fun syncNow(includeHistory: Boolean = true) {
         val account = currentAccount.value ?: return
         viewModelScope.launch {
-            repository.syncWithGoogleSheets(account)
+            repository.syncWithGoogleSheets(account, includeHistory)
+        }
+    }
+
+    fun refreshHistoryIfNeeded() {
+        val account = currentAccount.value ?: return
+        if (recentHistory.value.isEmpty()) {
+            viewModelScope.launch {
+                repository.syncWithGoogleSheets(account, includeHistory = true)
+            }
+        }
+    }
+
+    fun lookupBarcode(barcode: String, onResult: (ScannedProductInfo?) -> Unit) {
+        isScanningLookup.value = true
+        viewModelScope.launch {
+            val info = barcodeLookupService.lookupBarcode(barcode)
+            isScanningLookup.value = false
+            onResult(info)
+        }
+    }
+
+    fun updateHouseholdSettings(householdSize: Int, targetYears: Double, lowStockPct: Int, useSoonDays: Int) {
+        val current = settings.value ?: AppSettingsEntity()
+        val updated = current.copy(
+            householdSize = householdSize.coerceIn(1, 20),
+            adults = maxOf(1, householdSize - 3),
+            targetYears = targetYears.coerceIn(0.5, 10.0),
+            lowStockPct = lowStockPct.coerceIn(5, 95),
+            useSoonDays = useSoonDays.coerceIn(7, 365)
+        )
+        viewModelScope.launch {
+            repository.updateSettings(updated, currentAccount.value)
+        }
+    }
+
+    fun addBundleToGroceries(bundle: SupplyBundle) {
+        val actor = currentAccount.value?.displayName ?: "Family Member"
+        viewModelScope.launch {
+            repository.addBundleToGroceries(bundle.items, actor, currentAccount.value)
+        }
+    }
+
+    fun addBundleToPantry(bundle: SupplyBundle) {
+        val actor = currentAccount.value?.displayName ?: "Family Member"
+        viewModelScope.launch {
+            repository.addBundleToPantry(bundle.items, actor, currentAccount.value)
         }
     }
 

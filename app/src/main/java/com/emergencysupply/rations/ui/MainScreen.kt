@@ -1,6 +1,8 @@
 package com.emergencysupply.rations.ui
 
 import android.app.Activity
+import android.widget.Toast
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -44,6 +46,9 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
@@ -96,10 +101,13 @@ fun MainScreen(
     val account by viewModel.currentAccount.collectAsState()
     val allInventory by viewModel.allInventory.collectAsState()
     val signInError by viewModel.signInError.collectAsState()
+    val searchQuery by viewModel.searchQuery.collectAsState()
+    val categoryFilter by viewModel.categoryFilter.collectAsState()
+    val locationFilter by viewModel.locationFilter.collectAsState()
+    val lowStockOnly by viewModel.lowStockOnlyFilter.collectAsState()
+    val expiringOnly by viewModel.expiringOnlyFilter.collectAsState()
     val context = LocalContext.current
-
-    val uncheckedGroceriesCount = groceries.count { !it.checked }
-    val hasAlertDot = updateStatus is UpdateStatus.Available || metrics.restockNeededCount > 0 || metrics.expiringSoonCount > 0
+    var lastBackPressMs by remember { mutableStateOf(0L) }
 
     val syncErrorMessage = (syncState as? SyncState.Error)?.message.orEmpty()
     val isUnauthorized = account != null && allInventory.isEmpty() && (
@@ -108,6 +116,38 @@ fun MainScreen(
         syncErrorMessage.contains("permission", ignoreCase = true) ||
         syncErrorMessage.contains("Forbidden", ignoreCase = true)
     )
+    val uncheckedGroceriesCount = groceries.count { !it.checked }
+    val hasAlertDot = updateStatus is UpdateStatus.Available || metrics.restockNeededCount > 0 || metrics.expiringSoonCount > 0
+
+    BackHandler(enabled = true) {
+        if (account != null && !isUnauthorized) {
+            if (currentTab == NavTab.INVENTORY && (categoryFilter != "All" || locationFilter != "All" || lowStockOnly || expiringOnly || searchQuery.isNotBlank())) {
+                viewModel.categoryFilter.value = "All"
+                viewModel.locationFilter.value = "All"
+                viewModel.lowStockOnlyFilter.value = false
+                viewModel.expiringOnlyFilter.value = false
+                viewModel.searchQuery.value = ""
+            } else if (currentTab != NavTab.DASHBOARD) {
+                viewModel.currentTab.value = NavTab.DASHBOARD
+            } else {
+                val now = System.currentTimeMillis()
+                if (now - lastBackPressMs <= 2000L) {
+                    (context as? Activity)?.finish()
+                } else {
+                    lastBackPressMs = now
+                    Toast.makeText(context, "Press back again to exit", Toast.LENGTH_SHORT).show()
+                }
+            }
+        } else {
+            val now = System.currentTimeMillis()
+            if (now - lastBackPressMs <= 2000L) {
+                (context as? Activity)?.finish()
+            } else {
+                lastBackPressMs = now
+                Toast.makeText(context, "Press back again to exit", Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
 
     if (account == null) {
         AuthGateScreen(

@@ -9,6 +9,7 @@ import com.emergencysupply.rations.updater.GitHubSelfUpdater
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
 
 class RationsApplication : Application() {
 
@@ -22,5 +23,8 @@ class RationsApplication : Application() {
 
     override fun onCreate() {
         super.onCreate()
+        applicationScope.launch(Dispatchers.IO) {
+            repository.prewarmCache()
+        }
     }
 }

@@ -4,6 +4,18 @@ A native Android application built with **Kotlin**, **Jetpack Compose**, and **M
 
 ---
 
+## ✨ What's New in v1.8.0
+
+- **👆 Double-Back to Exit & Smart Back Navigation**: Prevents accidental exits with hierarchical Back navigation and a 2-second double-back guard.
+- **📷 Camera Barcode Scanner + Auto-Fill**: CameraX + ML Kit scanner with Open Food Facts lookup in Pantry & Groceries.
+- **⚙️ Editable Household Targets (Sheet Synced)**: Update household size, reserve horizon, low-stock threshold, and expiry window directly in Settings.
+- **🔔 Daily Expiry Reminders**: Offline WorkManager daily notifications for expired and expiring-soon rations.
+- **🎒 Emergency Kits & Recipe Bundles**: 1-tap populate Bug-Out, Winter Outage, Weekly Biryani, Baby Care, and Breakfast kits into Pantry or Groceries.
+- **🖨️ Offline Printable PDF & CSV Export**: Generate printable inventory sheets anytime via `FileProvider`.
+- **⚡ Faster Sync & Load Times**: Batched Google Sheets upserts/history appends, cached row indices, lazy history polling, atomic Room transactions, and cold-start DB pre-warming.
+
+---
+
 ## ✨ What's New in v1.7.0
 
 - **🎡 Rotating Drum-Wheel Edit Settings**: Redesigned item editing & custom-add sheets using vertical snap-wheel pickers for Categories, Storage Spots, Quantities, Par Goals, Units, and Month/Day/Year expiration dates (plus an optional `Type Exact` toggle).

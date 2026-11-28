@@ -31,8 +31,10 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.DeleteSweep
 import androidx.compose.material.icons.filled.Inventory
+import androidx.compose.material.icons.filled.Inventory2
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
+import androidx.compose.material.icons.filled.QrCodeScanner
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.ShoppingCart
 import androidx.compose.material.icons.filled.Star
@@ -70,11 +72,14 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.emergencysupply.rations.data.BundleCatalog
 import com.emergencysupply.rations.data.PlannedRationTemplate
 import com.emergencysupply.rations.data.PreplannedCatalog
+import com.emergencysupply.rations.data.SupplyBundle
 import com.emergencysupply.rations.data.local.entity.GroceryItem
 import com.emergencysupply.rations.data.local.entity.InventoryItem
 import com.emergencysupply.rations.ui.MainViewModel
+import com.emergencysupply.rations.ui.components.BarcodeScannerSheet
 import com.emergencysupply.rations.ui.components.ScrollableMultiWheelPicker
 import com.emergencysupply.rations.ui.components.WheelColumnSpec
 import com.emergencysupply.rations.ui.components.categoryVisualFor
@@ -114,7 +119,7 @@ data class GrocerySuggestion(
     val icon: String = "📦"
 )
 
-@OptIn(ExperimentalFoundationApi::class)
+@OptIn(ExperimentalFoundationApi::class, ExperimentalMaterial3Api::class)
 @Composable
 fun GroceriesScreen(viewModel: MainViewModel) {
     val context = LocalContext.current
@@ -122,6 +127,9 @@ fun GroceriesScreen(viewModel: MainViewModel) {
     val allInventory by viewModel.allInventory.collectAsState()
     val selectedStore by viewModel.groceryStoreFilter.collectAsState()
     val favoritesOnly by viewModel.favoritesOnlyFilter.collectAsState()
+
+    var showBarcodeScanner by remember { mutableStateOf(false) }
+    var showBundlesSheet by remember { mutableStateOf(false) }
 
     var newName by remember { mutableStateOf("") }
     var newQty by remember { mutableStateOf("1") }
@@ -260,6 +268,27 @@ fun GroceriesScreen(viewModel: MainViewModel) {
                     }
                 }
 
+                // Bundles chip
+                Surface(
+                    shape = RoundedCornerShape(18.dp),
+                    color = CardSurface,
+                    border = BorderStroke(1.dp, BorderSlate),
+                    shadowElevation = 1.dp,
+                    modifier = Modifier.clickable { showBundlesSheet = true }
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = "🎒 Bundles",
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = DarkSlate
+                        )
+                    }
+                }
+
                 // Share button
                 Surface(
                     shape = RoundedCornerShape(18.dp),
@@ -357,7 +386,7 @@ fun GroceriesScreen(viewModel: MainViewModel) {
                             onValueChange = { newName = it },
                             placeholder = { Text("Or type item name...", fontSize = 13.sp, color = LightSlate) },
                             singleLine = true,
-                            modifier = Modifier.weight(1.8f),
+                            modifier = Modifier.weight(1.5f),
                             shape = RoundedCornerShape(14.dp),
                             colors = OutlinedTextFieldDefaults.colors(
                                 focusedBorderColor = TealPrimary,
@@ -373,7 +402,7 @@ fun GroceriesScreen(viewModel: MainViewModel) {
                             placeholder = { Text("Qty", fontSize = 13.sp) },
                             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                             singleLine = true,
-                            modifier = Modifier.weight(0.65f),
+                            modifier = Modifier.weight(0.55f),
                             shape = RoundedCornerShape(14.dp),
                             colors = OutlinedTextFieldDefaults.colors(
                                 focusedBorderColor = TealPrimary,
@@ -382,6 +411,18 @@ fun GroceriesScreen(viewModel: MainViewModel) {
                                 unfocusedContainerColor = SoftTileSurface
                             )
                         )
+
+                        IconButton(
+                            onClick = { showBarcodeScanner = true },
+                            modifier = Modifier.size(44.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.QrCodeScanner,
+                                contentDescription = "Scan Barcode",
+                                tint = EmeraldDeep,
+                                modifier = Modifier.size(24.dp)
+                            )
+                        }
 
                         Button(
                             onClick = {
@@ -847,6 +888,169 @@ fun GroceriesScreen(viewModel: MainViewModel) {
                 editingGrocery = null
             }
         )
+    }
+
+    if (showBarcodeScanner) {
+        BarcodeScannerSheet(
+            onBarcodeDetected = { barcode ->
+                showBarcodeScanner = false
+                viewModel.lookupBarcode(barcode) { info ->
+                    if (info != null) {
+                        newName = info.name
+                        newUnit = info.unit
+                        newQty = info.defaultQty.toInt().coerceAtLeast(1).toString()
+                        newAisle = PreplannedCatalog.aisleForItem(info.name, info.category)
+                        Toast.makeText(context, "Found: ${info.name}", Toast.LENGTH_SHORT).show()
+                    } else {
+                        Toast.makeText(context, "Barcode $barcode not found — type item name", Toast.LENGTH_SHORT).show()
+                    }
+                }
+            },
+            onDismiss = { showBarcodeScanner = false }
+        )
+    }
+
+    if (showBundlesSheet) {
+        val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+        ModalBottomSheet(
+            onDismissRequest = { showBundlesSheet = false },
+            sheetState = sheetState,
+            containerColor = CardSurface,
+            shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp)
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .navigationBarsPadding()
+                    .padding(horizontal = 20.dp)
+                    .padding(bottom = 24.dp)
+                    .verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(14.dp)
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Surface(
+                        shape = RoundedCornerShape(12.dp),
+                        color = TealSoft,
+                        modifier = Modifier.size(40.dp)
+                    ) {
+                        Box(contentAlignment = Alignment.Center) {
+                            Text("🎒", fontSize = 22.sp)
+                        }
+                    }
+                    Spacer(modifier = Modifier.width(12.dp))
+                    Column {
+                        Text(
+                            text = "Emergency & Recipe Bundles",
+                            fontWeight = FontWeight.ExtraBold,
+                            fontSize = 18.sp,
+                            color = MidnightSlate
+                        )
+                        Text(
+                            text = "1-tap add curated kits directly to your grocery list",
+                            fontSize = 12.sp,
+                            color = MediumSlate
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(2.dp))
+
+                BundleCatalog.allBundles.forEach { bundle ->
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(18.dp),
+                        colors = CardDefaults.cardColors(containerColor = SoftTileSurface),
+                        border = BorderStroke(1.dp, BorderSlate),
+                        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
+                    ) {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(16.dp),
+                            verticalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.Top
+                            ) {
+                                Row(
+                                    modifier = Modifier.weight(1f),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Surface(
+                                        shape = RoundedCornerShape(12.dp),
+                                        color = CardSurface,
+                                        border = BorderStroke(1.dp, BorderSlate),
+                                        modifier = Modifier.size(42.dp)
+                                    ) {
+                                        Box(contentAlignment = Alignment.Center) {
+                                            Text(bundle.icon, fontSize = 22.sp)
+                                        }
+                                    }
+                                    Spacer(modifier = Modifier.width(10.dp))
+                                    Column {
+                                        Text(
+                                            text = bundle.title,
+                                            fontWeight = FontWeight.Bold,
+                                            fontSize = 15.sp,
+                                            color = MidnightSlate
+                                        )
+                                        Text(
+                                            text = bundle.subtitle,
+                                            fontSize = 12.sp,
+                                            color = DarkSlate,
+                                            lineHeight = 16.sp
+                                        )
+                                    }
+                                }
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Surface(
+                                    shape = RoundedCornerShape(12.dp),
+                                    color = EmeraldDeep.copy(alpha = 0.1f),
+                                    border = BorderStroke(1.dp, EmeraldDeep.copy(alpha = 0.3f))
+                                ) {
+                                    Text(
+                                        text = "${bundle.items.size} items",
+                                        fontSize = 11.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = EmeraldDeep,
+                                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                                    )
+                                }
+                            }
+
+                            Button(
+                                onClick = {
+                                    viewModel.addBundleToGroceries(bundle)
+                                    showBundlesSheet = false
+                                    Toast.makeText(
+                                        context,
+                                        "Added ${bundle.items.size} items from '${bundle.title}' to Groceries!",
+                                        Toast.LENGTH_SHORT
+                                    ).show()
+                                },
+                                shape = RoundedCornerShape(14.dp),
+                                colors = ButtonDefaults.buttonColors(containerColor = InkBlack),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(44.dp)
+                            ) {
+                                Text(
+                                    text = "+ Add All to List",
+                                    fontSize = 13.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = Color.White
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        }
     }
 }
 

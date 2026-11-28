@@ -33,11 +33,21 @@ class GoogleSheetsClient(private val context: Context) {
     @Volatile
     private var cachedService: Sheets? = null
 
+    private val cachedInventoryRowById = java.util.concurrent.ConcurrentHashMap<String, Int>()
+    @Volatile
+    private var cachedMasterSheetId: Int? = null
+
+    fun clearSessionCache() {
+        cachedInventoryRowById.clear()
+        cachedMasterSheetId = null
+    }
+
     data class BatchSheetSnapshot(
         val inventory: List<InventoryItem>,
         val groceries: List<GroceryItem>,
         val history: List<HistoryLogEntry>,
-        val settings: AppSettingsEntity
+        val settings: AppSettingsEntity,
+        val historyFetched: Boolean = false
     )
 
     private fun getSheetsService(account: GoogleSignInAccount): Sheets {
@@ -64,33 +74,40 @@ class GoogleSheetsClient(private val context: Context) {
         return created
     }
 
-    suspend fun fetchAllSheetsBatch(account: GoogleSignInAccount): BatchSheetSnapshot = withContext(Dispatchers.IO) {
+    suspend fun fetchAllSheetsBatch(account: GoogleSignInAccount, includeHistory: Boolean = false): BatchSheetSnapshot = withContext(Dispatchers.IO) {
         val service = getSheetsService(account)
+        val rangesToFetch = if (includeHistory) {
+            listOf("'Master Inventory'!A2:S", "'Groceries'!A2:J", "'History Log'!A2:I", "'Settings'!A2:B")
+        } else {
+            listOf("'Master Inventory'!A2:S", "'Groceries'!A2:J", "'Settings'!A2:B")
+        }
         try {
             val batchResp = service.spreadsheets().values()
                 .batchGet(spreadsheetId)
-                .setRanges(listOf("'Master Inventory'!A2:S", "'Groceries'!A2:J", "'History Log'!A2:I", "'Settings'!A2:B"))
+                .setRanges(rangesToFetch)
                 .execute()
 
             val ranges = batchResp.valueRanges ?: emptyList()
             val invRows = ranges.getOrNull(0)?.getValues() ?: emptyList()
             val grocRows = ranges.getOrNull(1)?.getValues() ?: emptyList()
-            val histRows = ranges.getOrNull(2)?.getValues() ?: emptyList()
-            val settingsRows = ranges.getOrNull(3)?.getValues() ?: emptyList()
+            val histRows = if (includeHistory) ranges.getOrNull(2)?.getValues() ?: emptyList() else emptyList()
+            val settingsRows = if (includeHistory) ranges.getOrNull(3)?.getValues() ?: emptyList() else ranges.getOrNull(2)?.getValues() ?: emptyList()
 
             BatchSheetSnapshot(
                 inventory = parseInventoryRows(invRows),
                 groceries = parseGroceryRows(grocRows),
-                history = parseHistoryRows(histRows),
-                settings = parseSettingsRows(settingsRows, account.email ?: "")
+                history = if (includeHistory) parseHistoryRows(histRows) else emptyList(),
+                settings = parseSettingsRows(settingsRows, account.email ?: ""),
+                historyFetched = includeHistory
             )
         } catch (_: Exception) {
             // Fallback gracefully if one sheet tab name differs
             BatchSheetSnapshot(
                 inventory = fetchMasterInventory(account),
                 groceries = try { fetchGroceries(account) } catch (_: Exception) { emptyList() },
-                history = try { fetchHistoryLog(account) } catch (_: Exception) { emptyList() },
-                settings = fetchSettings(account)
+                history = if (includeHistory) { try { fetchHistoryLog(account) } catch (_: Exception) { emptyList() } } else emptyList(),
+                settings = fetchSettings(account),
+                historyFetched = includeHistory
             )
         }
     }
@@ -106,9 +123,10 @@ class GoogleSheetsClient(private val context: Context) {
     private fun parseInventoryRows(rows: List<List<Any>>): List<InventoryItem> {
         val items = mutableListOf<InventoryItem>()
 
-        for (row in rows) {
+        for ((index, row) in rows.withIndex()) {
             val id = row.getOrNull(0)?.toString()?.trim() ?: continue
             if (id.isEmpty()) continue
+            cachedInventoryRowById[id] = index + 2
             val name = row.getOrNull(1)?.toString()?.trim() ?: continue
             if (name.isEmpty()) continue
 
@@ -160,21 +178,50 @@ class GoogleSheetsClient(private val context: Context) {
 
     suspend fun upsertInventoryItem(account: GoogleSignInAccount, item: InventoryItem) = withContext(Dispatchers.IO) {
         val service = getSheetsService(account)
-        val response: ValueRange = service.spreadsheets().values()
-            .get(spreadsheetId, "'Master Inventory'!A2:S")
-            .setValueRenderOption("FORMULA")
-            .execute()
+        var targetRow: Int? = null
+        var isColIFormula = false
 
-        val rows = response.getValues() ?: emptyList()
-        val index = rows.indexOfFirst { it.getOrNull(0)?.toString()?.trim() == item.id }
+        val cachedRow = cachedInventoryRowById[item.id]
+        if (cachedRow != null) {
+            try {
+                val checkResp = service.spreadsheets().values()
+                    .get(spreadsheetId, "'Master Inventory'!A$cachedRow:I$cachedRow")
+                    .setValueRenderOption("FORMULA")
+                    .execute()
+                val rowValues = checkResp.getValues()?.firstOrNull()
+                if (rowValues?.getOrNull(0)?.toString()?.trim() == item.id) {
+                    targetRow = cachedRow
+                    val colI = rowValues.getOrNull(8)?.toString()?.trim() ?: ""
+                    isColIFormula = colI.startsWith("=")
+                } else {
+                    cachedInventoryRowById.remove(item.id)
+                }
+            } catch (_: Exception) {
+                cachedInventoryRowById.remove(item.id)
+            }
+        }
 
-        if (index != -1) {
-            val rowNum = index + 2
-            val existingRow = rows[index]
-            val colI = existingRow.getOrNull(8)?.toString()?.trim() ?: ""
-            val isFormula = colI.startsWith("=")
+        if (targetRow == null) {
+            val response: ValueRange = service.spreadsheets().values()
+                .get(spreadsheetId, "'Master Inventory'!A2:S")
+                .setValueRenderOption("FORMULA")
+                .execute()
 
-            if (isFormula) {
+            val rows = response.getValues() ?: emptyList()
+            val index = rows.indexOfFirst { it.getOrNull(0)?.toString()?.trim() == item.id }
+
+            if (index != -1) {
+                targetRow = index + 2
+                cachedInventoryRowById[item.id] = targetRow
+                val existingRow = rows[index]
+                val colI = existingRow.getOrNull(8)?.toString()?.trim() ?: ""
+                isColIFormula = colI.startsWith("=")
+            }
+        }
+
+        if (targetRow != null) {
+            val rowNum = targetRow
+            if (isColIFormula) {
                 val batchData = listOf(
                     ValueRange().setRange("'Master Inventory'!B$rowNum:H$rowNum").setValues(
                         listOf(listOf<Any>(item.name, item.category, item.unit, item.location, item.initialQty, item.stockIn, item.stockOut))
@@ -256,8 +303,118 @@ class GoogleSheetsClient(private val context: Context) {
         }
     }
 
+    suspend fun upsertInventoryItemsBatch(account: GoogleSignInAccount, items: List<InventoryItem>) = withContext(Dispatchers.IO) {
+        if (items.isEmpty()) return@withContext
+        val service = getSheetsService(account)
+        val response: ValueRange = service.spreadsheets().values()
+            .get(spreadsheetId, "'Master Inventory'!A2:S")
+            .setValueRenderOption("FORMULA")
+            .execute()
+        val rows = response.getValues() ?: emptyList()
+        for ((idx, r) in rows.withIndex()) {
+            val id = r.getOrNull(0)?.toString()?.trim() ?: continue
+            if (id.isNotEmpty()) {
+                cachedInventoryRowById[id] = idx + 2
+            }
+        }
+
+        val batchUpdates = mutableListOf<ValueRange>()
+        val rowsToAppend = mutableListOf<List<Any>>()
+
+        for (item in items) {
+            val index = rows.indexOfFirst { it.getOrNull(0)?.toString()?.trim() == item.id }
+            if (index != -1) {
+                val rowNum = index + 2
+                val existingRow = rows[index]
+                val colI = existingRow.getOrNull(8)?.toString()?.trim() ?: ""
+                val isFormula = colI.startsWith("=")
+                if (isFormula) {
+                    batchUpdates.add(ValueRange().setRange("'Master Inventory'!B$rowNum:H$rowNum").setValues(
+                        listOf(listOf<Any>(item.name, item.category, item.unit, item.location, item.initialQty, item.stockIn, item.stockOut))
+                    ))
+                    batchUpdates.add(ValueRange().setRange("'Master Inventory'!J$rowNum").setValues(
+                        listOf(listOf<Any>(item.parLevel))
+                    ))
+                    batchUpdates.add(ValueRange().setRange("'Master Inventory'!L$rowNum").setValues(
+                        listOf(listOf<Any>(item.earliestExpiry ?: ""))
+                    ))
+                    batchUpdates.add(ValueRange().setRange("'Master Inventory'!P$rowNum").setValues(
+                        listOf(listOf<Any>(item.servingsPerUnit))
+                    ))
+                    batchUpdates.add(ValueRange().setRange("'Master Inventory'!R$rowNum:S$rowNum").setValues(
+                        listOf(listOf<Any>(item.notes, item.lastUpdated))
+                    ))
+                } else {
+                    val fullRow = listOf<Any>(
+                        item.id,
+                        item.name,
+                        item.category,
+                        item.unit,
+                        item.location,
+                        item.initialQty,
+                        item.stockIn,
+                        item.stockOut,
+                        item.currentQty,
+                        item.parLevel,
+                        item.restockNeeded,
+                        item.earliestExpiry ?: "",
+                        item.daysUntilExpiry ?: "",
+                        item.expirationStatus,
+                        item.stockStatus,
+                        item.servingsPerUnit,
+                        item.totalServings,
+                        item.notes,
+                        item.lastUpdated
+                    )
+                    batchUpdates.add(ValueRange().setRange("'Master Inventory'!A$rowNum:S$rowNum").setValues(listOf(fullRow)))
+                }
+            } else {
+                val fullRow = listOf<Any>(
+                    item.id,
+                    item.name,
+                    item.category,
+                    item.unit,
+                    item.location,
+                    item.initialQty,
+                    item.stockIn,
+                    item.stockOut,
+                    item.currentQty,
+                    item.parLevel,
+                    item.restockNeeded,
+                    item.earliestExpiry ?: "",
+                    item.daysUntilExpiry ?: "",
+                    item.expirationStatus,
+                    item.stockStatus,
+                    item.servingsPerUnit,
+                    item.totalServings,
+                    item.notes,
+                    item.lastUpdated
+                )
+                rowsToAppend.add(fullRow)
+            }
+        }
+
+        if (batchUpdates.isNotEmpty()) {
+            val batchRequest = BatchUpdateValuesRequest()
+                .setValueInputOption("USER_ENTERED")
+                .setData(batchUpdates)
+            service.spreadsheets().values()
+                .batchUpdate(spreadsheetId, batchRequest)
+                .execute()
+        }
+
+        if (rowsToAppend.isNotEmpty()) {
+            val body = ValueRange().setValues(rowsToAppend)
+            service.spreadsheets().values()
+                .append(spreadsheetId, "'Master Inventory'!A:S", body)
+                .setValueInputOption("USER_ENTERED")
+                .execute()
+        }
+    }
+
     suspend fun deleteInventoryRow(account: GoogleSignInAccount, itemId: String) = withContext(Dispatchers.IO) {
         val service = getSheetsService(account)
+        cachedInventoryRowById.remove(itemId)
         val response: ValueRange = service.spreadsheets().values()
             .get(spreadsheetId, "'Master Inventory'!A2:A")
             .execute()
@@ -265,10 +422,16 @@ class GoogleSheetsClient(private val context: Context) {
         val index = rows.indexOfFirst { it.getOrNull(0)?.toString()?.trim() == itemId }
         if (index != -1) {
             val rowNum = index + 2
-            val spreadsheet = service.spreadsheets().get(spreadsheetId).execute()
-            val sheetId = spreadsheet.sheets?.firstOrNull {
-                it.properties?.title == "Master Inventory"
-            }?.properties?.sheetId
+            var sheetId = cachedMasterSheetId
+            if (sheetId == null) {
+                val spreadsheet = service.spreadsheets().get(spreadsheetId).execute()
+                sheetId = spreadsheet.sheets?.firstOrNull {
+                    it.properties?.title == "Master Inventory"
+                }?.properties?.sheetId
+                if (sheetId != null) {
+                    cachedMasterSheetId = sheetId
+                }
+            }
             if (sheetId != null) {
                 val deleteReq = DeleteDimensionRequest().setRange(
                     DimensionRange()
@@ -427,6 +590,60 @@ class GoogleSheetsClient(private val context: Context) {
         )
     }
 
+    suspend fun saveSettingsJson(account: GoogleSignInAccount, settings: AppSettingsEntity) = withContext(Dispatchers.IO) {
+        val service = getSheetsService(account)
+        val json = com.google.gson.JsonObject().apply {
+            addProperty("adults", settings.adults)
+            addProperty("targetYears", settings.targetYears)
+            addProperty("lowStockPct", settings.lowStockPct)
+            addProperty("useSoonDays", settings.useSoonDays)
+            val kidAgesElement = try {
+                com.google.gson.JsonParser.parseString(settings.kidAgesJson)
+            } catch (_: Exception) {
+                com.google.gson.JsonArray()
+            }
+            add("kidAges", kidAgesElement)
+            val catElement = try {
+                com.google.gson.JsonParser.parseString(settings.categoriesJson)
+            } catch (_: Exception) {
+                com.google.gson.JsonArray()
+            }
+            add("categories", catElement)
+            val locElement = try {
+                com.google.gson.JsonParser.parseString(settings.locationsJson)
+            } catch (_: Exception) {
+                com.google.gson.JsonArray()
+            }
+            add("locations", locElement)
+        }
+        val jsonStr = json.toString()
+
+        val response: ValueRange = try {
+            service.spreadsheets().values()
+                .get(spreadsheetId, "'Settings'!A2:B")
+                .execute()
+        } catch (_: Exception) {
+            ValueRange()
+        }
+
+        val rows = response.getValues() ?: emptyList()
+        val index = rows.indexOfFirst { it.getOrNull(0)?.toString()?.trim() == "app_settings_json" }
+        if (index != -1) {
+            val rowNum = index + 2
+            val body = ValueRange().setValues(listOf(listOf("app_settings_json", jsonStr)))
+            service.spreadsheets().values()
+                .update(spreadsheetId, "'Settings'!A$rowNum:B$rowNum", body)
+                .setValueInputOption("USER_ENTERED")
+                .execute()
+        } else {
+            val body = ValueRange().setValues(listOf(listOf("app_settings_json", jsonStr)))
+            service.spreadsheets().values()
+                .append(spreadsheetId, "'Settings'!A:B", body)
+                .setValueInputOption("USER_ENTERED")
+                .execute()
+        }
+    }
+
     suspend fun appendHistoryEntry(account: GoogleSignInAccount, entry: HistoryLogEntry) = withContext(Dispatchers.IO) {
         val service = getSheetsService(account)
         val values = listOf(
@@ -443,6 +660,29 @@ class GoogleSheetsClient(private val context: Context) {
             )
         )
         val body = ValueRange().setValues(values)
+        service.spreadsheets().values()
+            .append(spreadsheetId, "'History Log'!A:I", body)
+            .setValueInputOption("USER_ENTERED")
+            .execute()
+    }
+
+    suspend fun appendHistoryEntriesBatch(account: GoogleSignInAccount, entries: List<HistoryLogEntry>) = withContext(Dispatchers.IO) {
+        if (entries.isEmpty()) return@withContext
+        val service = getSheetsService(account)
+        val rows = entries.map { entry ->
+            listOf<Any>(
+                entry.timestamp,
+                entry.action,
+                entry.category,
+                entry.itemName,
+                entry.change,
+                entry.newStock,
+                entry.unit,
+                entry.expirationDate ?: "",
+                entry.notes
+            )
+        }
+        val body = ValueRange().setValues(rows)
         service.spreadsheets().values()
             .append(spreadsheetId, "'History Log'!A:I", body)
             .setValueInputOption("USER_ENTERED")
