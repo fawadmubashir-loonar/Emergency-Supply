@@ -2,21 +2,27 @@ package com.emergencysupply.rations.ui.theme
 
 import androidx.compose.ui.graphics.Color
 
-// Clean Bright Canvas & Surface Hierarchy (Zero muddy pastels)
-val BackgroundSurface = Color(0xFFF1F5F9)
+// Warm Wonder Bites / Budgetly Canvas & Surface Hierarchy
+val BackgroundSurface = Color(0xFFFAF8F5)
 val CardSurface = Color(0xFFFFFFFF)
-val SoftTileSurface = Color(0xFFF8FAFC)
+val SoftTileSurface = Color(0xFFF4EFE6)
 val InkBlack = Color(0xFF0F172A)
+val WarmCream = Color(0xFFFAF8F5)
 
-// Rich Vibrant Brand & Functional Accents (Inspired by AgroPulse, Finance, Logistics, Cloud Storage)
+// Rich Vibrant Brand & Functional Accents
 val CobaltBlue = Color(0xFF2563EB)
 val RoyalBlue = Color(0xFF1D4ED8)
 val CobaltSoft = Color(0xFFDBEAFE)
 
-val TealPrimary = Color(0xFF0D9488)
+val EmeraldDeep = Color(0xFF047857)
+val EmeraldVibrant = Color(0xFF059669)
+val TealPrimary = Color(0xFF059669)
 val TealAccent = Color(0xFF14B8A6)
 val TealSoft = Color(0xFFCCFBF1)
 val TealVerySoft = Color(0xFFF0FDFA)
+
+val PeachSoft = Color(0xFFFFEFE2)
+val PeachTint = Color(0xFFFFE0C7)
 
 val IndigoAccent = Color(0xFF4F46E5)
 val IndigoSoft = Color(0xFFE0E7FF)
@@ -33,7 +39,7 @@ val DarkSlate = Color(0xFF1E293B)
 val MediumSlate = Color(0xFF475569)
 val LightSlate = Color(0xFF64748B)
 val MutedSlate = Color(0xFF94A3B8)
-val BorderSlate = Color(0xFFE2E8F0)
+val BorderSlate = Color(0xFFE7E0D6)
 
 // Vivid Semantic Status
 val SuccessGreen = Color(0xFF10B981)

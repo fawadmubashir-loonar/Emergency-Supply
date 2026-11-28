@@ -44,13 +44,17 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.emergencysupply.rations.ui.NavTab
@@ -89,6 +93,34 @@ import kotlinx.coroutines.launch
 import java.time.LocalDate
 import java.time.YearMonth
 import java.time.format.DateTimeFormatter
+
+/**
+ * Reusable dashed border modifier with rounded corners (Budgetly / Wonder Bites styled).
+ */
+fun Modifier.dashedBorder(
+    width: Dp = 1.5.dp,
+    color: Color,
+    cornerRadius: Dp = 16.dp
+): Modifier = this.drawBehind {
+    val strokeWidthPx = width.toPx()
+    val halfStroke = strokeWidthPx / 2f
+    val cornerRadiusPx = cornerRadius.toPx()
+    val pathEffect = PathEffect.dashPathEffect(floatArrayOf(14f, 10f), 0f)
+
+    drawRoundRect(
+        color = color,
+        topLeft = Offset(halfStroke, halfStroke),
+        size = Size(
+            width = size.width - strokeWidthPx,
+            height = size.height - strokeWidthPx
+        ),
+        cornerRadius = CornerRadius(cornerRadiusPx, cornerRadiusPx),
+        style = Stroke(
+            width = strokeWidthPx,
+            pathEffect = pathEffect
+        )
+    )
+}
 
 data class CategoryVisual(val tint: Color, val softBg: Color)
 

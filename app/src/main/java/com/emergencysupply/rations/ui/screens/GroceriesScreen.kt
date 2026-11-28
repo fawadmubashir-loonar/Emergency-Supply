@@ -66,6 +66,7 @@ import com.emergencysupply.rations.data.local.entity.GroceryItem
 import com.emergencysupply.rations.data.local.entity.InventoryItem
 import com.emergencysupply.rations.ui.MainViewModel
 import com.emergencysupply.rations.ui.components.categoryVisualFor
+import com.emergencysupply.rations.ui.components.dashedBorder
 import com.emergencysupply.rations.ui.theme.BorderSlate
 import com.emergencysupply.rations.ui.theme.CardSurface
 import com.emergencysupply.rations.ui.theme.CobaltBlue
@@ -73,12 +74,16 @@ import com.emergencysupply.rations.ui.theme.CobaltSoft
 import com.emergencysupply.rations.ui.theme.DangerRed
 import com.emergencysupply.rations.ui.theme.DangerSoft
 import com.emergencysupply.rations.ui.theme.DarkSlate
+import com.emergencysupply.rations.ui.theme.EmeraldDeep
+import com.emergencysupply.rations.ui.theme.EmeraldVibrant
 import com.emergencysupply.rations.ui.theme.InkBlack
 import com.emergencysupply.rations.ui.theme.LightSlate
 import com.emergencysupply.rations.ui.theme.MediumSlate
 import com.emergencysupply.rations.ui.theme.MidnightSlate
 import com.emergencysupply.rations.ui.theme.MutedSlate
 import com.emergencysupply.rations.ui.theme.OrangeAccent
+import com.emergencysupply.rations.ui.theme.PeachSoft
+import com.emergencysupply.rations.ui.theme.PeachTint
 import com.emergencysupply.rations.ui.theme.SoftTileSurface
 import com.emergencysupply.rations.ui.theme.SuccessGreen
 import com.emergencysupply.rations.ui.theme.SuccessSoft
@@ -245,7 +250,7 @@ fun GroceriesScreen(viewModel: MainViewModel) {
                 Surface(
                     shape = RoundedCornerShape(18.dp),
                     color = CardSurface,
-                    border = BorderStroke(1.dp, CobaltBlue.copy(alpha = 0.3f)),
+                    border = BorderStroke(1.dp, BorderSlate),
                     shadowElevation = 1.dp,
                     modifier = Modifier.clickable {
                         val shareText = viewModel.buildShareableGroceryText(selectedStore, filteredGroceries)
@@ -284,6 +289,7 @@ fun GroceriesScreen(viewModel: MainViewModel) {
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(22.dp),
                 colors = CardDefaults.cardColors(containerColor = CardSurface),
+                border = BorderStroke(1.dp, BorderSlate),
                 elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
             ) {
                 Column(modifier = Modifier.padding(16.dp)) {
@@ -381,7 +387,7 @@ fun GroceriesScreen(viewModel: MainViewModel) {
                                 }
                             },
                             modifier = Modifier.height(52.dp),
-                            shape = RoundedCornerShape(14.dp),
+                            shape = RoundedCornerShape(20.dp),
                             colors = ButtonDefaults.buttonColors(containerColor = InkBlack),
                             enabled = newName.isNotBlank()
                         ) {
@@ -616,19 +622,21 @@ fun GroceriesScreen(viewModel: MainViewModel) {
         if (uncheckedItems.isEmpty() && checkedItems.isEmpty()) {
             item {
                 Card(
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .dashedBorder(width = 1.5.dp, color = EmeraldVibrant.copy(alpha = 0.5f), cornerRadius = 20.dp),
                     shape = RoundedCornerShape(20.dp),
-                    colors = CardDefaults.cardColors(containerColor = CardSurface),
-                    elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
+                    colors = CardDefaults.cardColors(containerColor = PeachSoft.copy(alpha = 0.45f)),
+                    elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
                 ) {
                     Box(
                         modifier = Modifier.fillMaxWidth().padding(vertical = 36.dp, horizontal = 20.dp),
                         contentAlignment = Alignment.Center
                     ) {
                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                            Surface(shape = CircleShape, color = TealSoft, modifier = Modifier.size(54.dp)) {
+                            Surface(shape = CircleShape, color = EmeraldVibrant.copy(alpha = 0.15f), modifier = Modifier.size(54.dp)) {
                                 Box(contentAlignment = Alignment.Center) {
-                                    Icon(Icons.Default.ShoppingCart, contentDescription = null, modifier = Modifier.size(24.dp), tint = TealPrimary)
+                                    Icon(Icons.Default.ShoppingCart, contentDescription = null, modifier = Modifier.size(24.dp), tint = EmeraldDeep)
                                 }
                             }
                             Spacer(modifier = Modifier.height(10.dp))
@@ -744,14 +752,15 @@ fun GroceriesScreen(viewModel: MainViewModel) {
                                         viewModel.finishShoppingTrip(checkedItems)
                                         Toast.makeText(context, "Finish Trip! Restocked ${checkedItems.size} items to Pantry 🎉", Toast.LENGTH_SHORT).show()
                                     },
-                                    shape = RoundedCornerShape(12.dp),
-                                    colors = ButtonDefaults.buttonColors(containerColor = SuccessGreen),
+                                    shape = RoundedCornerShape(20.dp),
+                                    colors = ButtonDefaults.buttonColors(containerColor = InkBlack),
                                     modifier = Modifier.height(34.dp)
                                 ) {
                                     Text(
                                         text = "Finish Trip → Pantry",
                                         fontSize = 11.sp,
-                                        fontWeight = FontWeight.Bold
+                                        fontWeight = FontWeight.Bold,
+                                        color = Color.White
                                     )
                                 }
 

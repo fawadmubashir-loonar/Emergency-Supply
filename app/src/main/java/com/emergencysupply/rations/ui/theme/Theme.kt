@@ -6,10 +6,10 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Color
 
 private val LightColorScheme = lightColorScheme(
-    primary = TealPrimary,
+    primary = EmeraldVibrant,
     onPrimary = Color.White,
     primaryContainer = TealSoft,
-    onPrimaryContainer = TealPrimary,
+    onPrimaryContainer = EmeraldDeep,
     secondary = InkBlack,
     onSecondary = Color.White,
     secondaryContainer = SoftTileSurface,
@@ -21,7 +21,7 @@ private val LightColorScheme = lightColorScheme(
     surfaceVariant = SoftTileSurface,
     onSurfaceVariant = MediumSlate,
     outline = BorderSlate,
-    outlineVariant = Color(0xFFF1F5F9)
+    outlineVariant = SoftTileSurface
 )
 
 @Composable

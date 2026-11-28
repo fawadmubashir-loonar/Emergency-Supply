@@ -2,6 +2,7 @@ package com.emergencysupply.rations.ui.screens
 
 import android.widget.Toast
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -63,6 +64,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
@@ -71,9 +73,11 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.emergencysupply.rations.data.PreplannedCatalog
 import com.emergencysupply.rations.data.local.entity.InventoryItem
+import com.emergencysupply.rations.ui.GroupSummary
 import com.emergencysupply.rations.ui.MainViewModel
 import com.emergencysupply.rations.ui.components.ScrollableWheelDatePicker
 import com.emergencysupply.rations.ui.components.categoryVisualFor
+import com.emergencysupply.rations.ui.components.dashedBorder
 import com.emergencysupply.rations.ui.theme.BorderSlate
 import com.emergencysupply.rations.ui.theme.CardSurface
 import com.emergencysupply.rations.ui.theme.CobaltBlue
@@ -81,11 +85,15 @@ import com.emergencysupply.rations.ui.theme.CobaltSoft
 import com.emergencysupply.rations.ui.theme.DangerRed
 import com.emergencysupply.rations.ui.theme.DangerSoft
 import com.emergencysupply.rations.ui.theme.DarkSlate
+import com.emergencysupply.rations.ui.theme.EmeraldDeep
+import com.emergencysupply.rations.ui.theme.EmeraldVibrant
 import com.emergencysupply.rations.ui.theme.InkBlack
 import com.emergencysupply.rations.ui.theme.LightSlate
 import com.emergencysupply.rations.ui.theme.MediumSlate
 import com.emergencysupply.rations.ui.theme.MidnightSlate
 import com.emergencysupply.rations.ui.theme.OrangeAccent
+import com.emergencysupply.rations.ui.theme.PeachSoft
+import com.emergencysupply.rations.ui.theme.PeachTint
 import com.emergencysupply.rations.ui.theme.SoftTileSurface
 import com.emergencysupply.rations.ui.theme.SuccessGreen
 import com.emergencysupply.rations.ui.theme.TealPrimary
@@ -115,11 +123,27 @@ fun InventoryScreen(viewModel: MainViewModel) {
     val availableCategories by viewModel.availableCategories.collectAsState()
     val availableLocations by viewModel.availableLocations.collectAsState()
 
-    var groupMode by remember { mutableStateOf(InventoryGroupMode.LIST) }
+    val categorySummaries by viewModel.categorySummaries.collectAsState()
+
+    val isCategoryHub = selectedCategory == "All" && searchQuery.isBlank() && !lowStockOnly && !expiringOnly && selectedLocation == "All"
+
     var showAddSheet by remember { mutableStateOf(false) }
     var editingItem by remember { mutableStateOf<InventoryItem?>(null) }
     var showNewCategoryPrompt by remember { mutableStateOf(false) }
     var showNewLocationPrompt by remember { mutableStateOf(false) }
+
+    val mergedCategories = remember(categorySummaries, availableCategories) {
+        val result = categorySummaries.toMutableList()
+        val seen = result.map { it.name.trim().lowercase() }.toMutableSet()
+        for (cat in availableCategories) {
+            val key = cat.trim().lowercase()
+            if (key !in seen) {
+                seen.add(key)
+                result.add(GroupSummary(name = cat, itemCount = 0, lowStockCount = 0, readinessPct = 100))
+            }
+        }
+        result
+    }
 
     Column(
         modifier = Modifier
@@ -167,8 +191,8 @@ fun InventoryScreen(viewModel: MainViewModel) {
                 )
                 Button(
                     onClick = { showAddSheet = true },
-                    shape = RoundedCornerShape(14.dp),
-                    colors = ButtonDefaults.buttonColors(containerColor = OrangeAccent),
+                    shape = RoundedCornerShape(20.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = InkBlack),
                     modifier = Modifier.height(40.dp)
                 ) {
                     Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(16.dp))
@@ -180,178 +204,264 @@ fun InventoryScreen(viewModel: MainViewModel) {
 
         Spacer(modifier = Modifier.height(10.dp))
 
-        // 2. View Group Switcher + Count
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                InventoryGroupMode.values().forEach { mode ->
-                    val isSel = groupMode == mode
-                    Surface(
-                        shape = RoundedCornerShape(12.dp),
-                        color = if (isSel) InkBlack else CardSurface,
-                        shadowElevation = if (isSel) 2.dp else 1.dp,
-                        modifier = Modifier.clickable { groupMode = mode }
+        if (isCategoryHub) {
+            // CATEGORIES HUB: 2-column grid inside LazyColumn
+            val chunkedRows = remember(mergedCategories) { mergedCategories.chunked(2) }
+
+            LazyColumn(
+                modifier = Modifier.fillMaxSize(),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                item {
+                    Spacer(modifier = Modifier.height(2.dp))
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
                         Text(
-                            text = mode.label,
+                            text = "Pantry Categories",
+                            fontSize = 16.sp,
+                            fontWeight = FontWeight.ExtraBold,
+                            color = MidnightSlate
+                        )
+                        Text(
+                            text = "${mergedCategories.size} categories • ${allInventory.size} items",
                             fontSize = 11.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = if (isSel) Color.White else MediumSlate,
-                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
+                            fontWeight = FontWeight.SemiBold,
+                            color = MediumSlate
                         )
                     }
                 }
-            }
 
-            Text(
-                text = "${items.size} items",
-                fontSize = 12.sp,
-                fontWeight = FontWeight.Bold,
-                color = MediumSlate
-            )
-        }
+                items(chunkedRows, key = { row -> "cat_row_" + row.joinToString("_") { it.name } }) { pair ->
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        for (summary in pair) {
+                            Box(modifier = Modifier.weight(1f)) {
+                                PantryCategoryCard(
+                                    summary = summary,
+                                    onClick = { viewModel.categoryFilter.value = summary.name }
+                                )
+                            }
+                        }
+                        if (pair.size == 1) {
+                            Spacer(modifier = Modifier.weight(1f))
+                        }
+                    }
+                }
 
-        Spacer(modifier = Modifier.height(8.dp))
-
-        // 3. Saturated Colorful Category Pills + "+ New Category"
-        LazyRow(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(6.dp)
-        ) {
-            item {
-                val isAll = selectedCategory == "All"
-                Surface(
-                    shape = RoundedCornerShape(20.dp),
-                    color = if (isAll) CobaltBlue else CardSurface,
-                    shadowElevation = if (isAll) 3.dp else 1.dp,
-                    modifier = Modifier.clickable { viewModel.categoryFilter.value = "All" }
-                ) {
-                    Text(
-                        text = "All Categories",
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = if (isAll) Color.White else DarkSlate,
-                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 7.dp)
-                    )
+                item {
+                    Card(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .dashedBorder(width = 1.5.dp, color = EmeraldVibrant.copy(alpha = 0.5f), cornerRadius = 18.dp)
+                            .clickable { showNewCategoryPrompt = true },
+                        shape = RoundedCornerShape(18.dp),
+                        colors = CardDefaults.cardColors(containerColor = PeachSoft.copy(alpha = 0.45f))
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(14.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.Center
+                        ) {
+                            Surface(
+                                shape = CircleShape,
+                                color = EmeraldVibrant.copy(alpha = 0.15f),
+                                modifier = Modifier.size(32.dp)
+                            ) {
+                                Box(contentAlignment = Alignment.Center) {
+                                    Icon(Icons.Default.Add, contentDescription = null, tint = EmeraldDeep, modifier = Modifier.size(18.dp))
+                                }
+                            }
+                            Spacer(modifier = Modifier.width(10.dp))
+                            Text(
+                                text = "+ New Category",
+                                fontSize = 14.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = EmeraldDeep
+                            )
+                        }
+                    }
+                    Spacer(modifier = Modifier.height(16.dp))
                 }
             }
-
-            items(availableCategories) { cat ->
-                val isSel = selectedCategory.equals(cat, ignoreCase = true)
-                val visual = categoryVisualFor(cat)
-                val icon = PreplannedCatalog.iconForCategory(cat)
-                Surface(
-                    shape = RoundedCornerShape(20.dp),
-                    color = if (isSel) visual.tint else CardSurface,
-                    shadowElevation = if (isSel) 3.dp else 1.dp,
-                    modifier = Modifier.clickable { viewModel.categoryFilter.value = cat }
-                ) {
-                    Text(
-                        text = "$icon $cat",
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = if (isSel) Color.White else DarkSlate,
-                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 7.dp)
-                    )
-                }
+        } else {
+            // DRILL-DOWN VIEW (Tapped category, searched, or filter active)
+            val activeTitle = when {
+                searchQuery.isNotBlank() -> "Search Results"
+                selectedCategory != "All" -> selectedCategory
+                lowStockOnly -> "Low Par Items"
+                expiringOnly -> "Expiring Soon"
+                selectedLocation != "All" -> selectedLocation
+                else -> "All Rations"
             }
-
-            item {
-                Surface(
-                    shape = RoundedCornerShape(20.dp),
-                    color = CobaltSoft,
-                    modifier = Modifier.clickable { showNewCategoryPrompt = true }
-                ) {
-                    Text(
-                        text = "+ Category",
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = CobaltBlue,
-                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 7.dp)
-                    )
-                }
+            val activeIcon = when {
+                searchQuery.isNotBlank() -> "🔍"
+                selectedCategory != "All" -> PreplannedCatalog.iconForCategory(selectedCategory)
+                lowStockOnly -> "⚠️"
+                expiringOnly -> "⏳"
+                selectedLocation != "All" -> "📍"
+                else -> "📦"
             }
-        }
+            val activeVisual = if (selectedCategory != "All") categoryVisualFor(selectedCategory) else null
+            val activeColor = activeVisual?.tint ?: CobaltBlue
 
-        Spacer(modifier = Modifier.height(6.dp))
-
-        // 4. Storage Spot Pills + "+ Spot"
-        LazyRow(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(6.dp)
-        ) {
-            item {
-                val isAll = selectedLocation == "All"
-                Surface(
-                    shape = RoundedCornerShape(18.dp),
-                    color = if (isAll) TealPrimary else CardSurface,
-                    shadowElevation = 1.dp,
-                    modifier = Modifier.clickable { viewModel.locationFilter.value = "All" }
-                ) {
-                    Text(
-                        text = "All Spots",
-                        fontSize = 11.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = if (isAll) Color.White else MediumSlate,
-                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp)
-                    )
-                }
-            }
-
-            items(availableLocations) { loc ->
-                val isSel = selectedLocation.equals(loc, ignoreCase = true)
-                Surface(
-                    shape = RoundedCornerShape(18.dp),
-                    color = if (isSel) TealPrimary else CardSurface,
-                    shadowElevation = 1.dp,
-                    modifier = Modifier.clickable { viewModel.locationFilter.value = loc }
-                ) {
-                    Text(
-                        text = "📍 $loc",
-                        fontSize = 11.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = if (isSel) Color.White else MediumSlate,
-                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp)
-                    )
-                }
-            }
-
-            item {
-                Surface(
-                    shape = RoundedCornerShape(18.dp),
-                    color = SoftTileSurface,
-                    border = BorderStroke(1.dp, BorderSlate),
-                    modifier = Modifier.clickable { showNewLocationPrompt = true }
-                ) {
-                    Text(
-                        text = "+ Spot",
-                        fontSize = 11.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = DarkSlate,
-                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp)
-                    )
-                }
-            }
-        }
-
-        if (lowStockOnly || expiringOnly || searchQuery.isNotEmpty() || selectedCategory != "All" || selectedLocation != "All") {
-            Spacer(modifier = Modifier.height(6.dp))
+            // Clean drill-down header bar
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                Surface(
+                    shape = RoundedCornerShape(12.dp),
+                    color = CobaltSoft,
+                    modifier = Modifier.clickable {
+                        viewModel.categoryFilter.value = "All"
+                        viewModel.locationFilter.value = "All"
+                        viewModel.lowStockOnlyFilter.value = false
+                        viewModel.expiringOnlyFilter.value = false
+                        viewModel.searchQuery.value = ""
+                    }
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = "← Categories",
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = CobaltBlue
+                        )
+                    }
+                }
+
+                Surface(
+                    shape = RoundedCornerShape(10.dp),
+                    color = InkBlack
+                ) {
+                    Text(
+                        text = "${items.size} items",
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color.White,
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            // Active category / filter title banner
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Surface(
+                    shape = RoundedCornerShape(10.dp),
+                    color = activeColor,
+                    modifier = Modifier.size(32.dp)
+                ) {
+                    Box(contentAlignment = Alignment.Center) {
+                        Text(activeIcon, fontSize = 16.sp)
+                    }
+                }
+                Spacer(modifier = Modifier.width(8.dp))
+                Text(
+                    text = activeTitle,
+                    fontSize = 16.sp,
+                    fontWeight = FontWeight.ExtraBold,
+                    color = MidnightSlate
+                )
+            }
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            // Storage Spot filter chips (All Spots, availableLocations, + Spot)
+            LazyRow(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                item {
+                    val isAll = selectedLocation == "All"
+                    Surface(
+                        shape = RoundedCornerShape(16.dp),
+                        color = if (isAll) TealPrimary else CardSurface,
+                        shadowElevation = 1.dp,
+                        modifier = Modifier.clickable { viewModel.locationFilter.value = "All" }
+                    ) {
+                        Text(
+                            text = "All Spots",
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = if (isAll) Color.White else MediumSlate,
+                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp)
+                        )
+                    }
+                }
+
+                items(availableLocations) { loc ->
+                    val isSel = selectedLocation.equals(loc, ignoreCase = true)
+                    Surface(
+                        shape = RoundedCornerShape(16.dp),
+                        color = if (isSel) TealPrimary else CardSurface,
+                        shadowElevation = 1.dp,
+                        modifier = Modifier.clickable { viewModel.locationFilter.value = loc }
+                    ) {
+                        Text(
+                            text = "📍 $loc",
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = if (isSel) Color.White else MediumSlate,
+                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp)
+                        )
+                    }
+                }
+
+                item {
+                    Surface(
+                        shape = RoundedCornerShape(16.dp),
+                        color = SoftTileSurface,
+                        border = BorderStroke(1.dp, BorderSlate),
+                        modifier = Modifier.clickable { showNewLocationPrompt = true }
+                    ) {
+                        Text(
+                            text = "+ Spot",
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = DarkSlate,
+                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp)
+                        )
+                    }
+                }
+            }
+
+            // Dismissible Low Par ✕ / Expiring Soon ✕ chips if active
+            if (lowStockOnly || expiringOnly) {
+                Spacer(modifier = Modifier.height(6.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
                     if (lowStockOnly) {
                         Surface(
                             shape = RoundedCornerShape(8.dp),
                             color = DangerRed,
                             modifier = Modifier.clickable { viewModel.lowStockOnlyFilter.value = false }
                         ) {
-                            Text("Low Par ✕", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = Color.White, modifier = Modifier.padding(horizontal = 7.dp, vertical = 3.dp))
+                            Text(
+                                text = "Low Par ✕",
+                                fontSize = 10.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = Color.White,
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                            )
                         }
                     }
                     if (expiringOnly) {
@@ -360,140 +470,101 @@ fun InventoryScreen(viewModel: MainViewModel) {
                             color = OrangeAccent,
                             modifier = Modifier.clickable { viewModel.expiringOnlyFilter.value = false }
                         ) {
-                            Text("Expiring Soon ✕", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = Color.White, modifier = Modifier.padding(horizontal = 7.dp, vertical = 3.dp))
-                        }
-                    }
-                }
-                Text(
-                    text = "Reset All",
-                    fontSize = 11.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = CobaltBlue,
-                    modifier = Modifier.clickable {
-                        viewModel.searchQuery.value = ""
-                        viewModel.categoryFilter.value = "All"
-                        viewModel.locationFilter.value = "All"
-                        viewModel.lowStockOnlyFilter.value = false
-                        viewModel.expiringOnlyFilter.value = false
-                    }
-                )
-            }
-        }
-
-        Spacer(modifier = Modifier.height(8.dp))
-
-        // 5. Inventory List
-        if (items.isEmpty()) {
-            Box(
-                modifier = Modifier.fillMaxSize().padding(top = 36.dp),
-                contentAlignment = Alignment.TopCenter
-            ) {
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Surface(shape = CircleShape, color = CardSurface, shadowElevation = 2.dp, modifier = Modifier.size(60.dp)) {
-                        Box(contentAlignment = Alignment.Center) {
-                            Icon(Icons.Default.FilterList, contentDescription = null, tint = LightSlate, modifier = Modifier.size(26.dp))
-                        }
-                    }
-                    Spacer(modifier = Modifier.height(12.dp))
-                    Text("No rations match filters", fontSize = 15.sp, fontWeight = FontWeight.Bold, color = DarkSlate)
-                    Spacer(modifier = Modifier.height(10.dp))
-                    Button(
-                        onClick = { showAddSheet = true },
-                        colors = ButtonDefaults.buttonColors(containerColor = OrangeAccent),
-                        shape = RoundedCornerShape(14.dp)
-                    ) {
-                        Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(16.dp))
-                        Spacer(modifier = Modifier.width(6.dp))
-                        Text("Pick from ${PreplannedCatalog.plannedRations.size}+ Rations", fontWeight = FontWeight.Bold)
-                    }
-                }
-            }
-        } else {
-            LazyColumn(
-                modifier = Modifier.fillMaxSize(),
-                verticalArrangement = Arrangement.spacedBy(10.dp)
-            ) {
-                when (groupMode) {
-                    InventoryGroupMode.LIST -> {
-                        items(items, key = { "inv_${it.id}" }) { item ->
-                            ReformedInventoryCard(
-                                item = item,
-                                onCardClick = { editingItem = item },
-                                onUse = { viewModel.useItem(item.id, 1.0) },
-                                onRestock = { viewModel.restockItem(item.id, 1.0) }
+                            Text(
+                                text = "Expiring Soon ✕",
+                                fontSize = 10.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = Color.White,
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
                             )
                         }
                     }
-                    InventoryGroupMode.BY_CATEGORY -> {
-                        val grouped = items.groupBy { it.category.ifBlank { "Uncategorized" } }
-                        grouped.forEach { (cat, list) ->
-                            item(key = "hdr_cat_$cat") {
-                                val visual = categoryVisualFor(cat)
-                                Row(
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    modifier = Modifier.padding(top = 6.dp, bottom = 2.dp)
-                                ) {
-                                    Surface(shape = RoundedCornerShape(10.dp), color = visual.tint, modifier = Modifier.size(28.dp)) {
-                                        Box(contentAlignment = Alignment.Center) {
-                                            Text(PreplannedCatalog.iconForCategory(cat), fontSize = 14.sp)
-                                        }
-                                    }
-                                    Spacer(modifier = Modifier.width(8.dp))
-                                    Text(cat, fontSize = 14.sp, fontWeight = FontWeight.ExtraBold, color = MidnightSlate)
-                                    Spacer(modifier = Modifier.width(6.dp))
-                                    Surface(shape = RoundedCornerShape(8.dp), color = visual.tint) {
-                                        Text("${list.size}", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = Color.White, modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp))
-                                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            // Inventory Item Cards or Empty State
+            if (items.isEmpty()) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 16.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Card(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .dashedBorder(width = 1.5.dp, color = EmeraldVibrant.copy(alpha = 0.5f), cornerRadius = 18.dp),
+                        shape = RoundedCornerShape(18.dp),
+                        colors = CardDefaults.cardColors(containerColor = PeachSoft.copy(alpha = 0.45f)),
+                        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
+                    ) {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 32.dp, horizontal = 20.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        ) {
+                            Surface(
+                                shape = CircleShape,
+                                color = CardSurface,
+                                shadowElevation = 2.dp,
+                                modifier = Modifier.size(60.dp)
+                            ) {
+                                Box(contentAlignment = Alignment.Center) {
+                                    Icon(
+                                        Icons.Default.FilterList,
+                                        contentDescription = null,
+                                        tint = EmeraldDeep,
+                                        modifier = Modifier.size(26.dp)
+                                    )
                                 }
                             }
-                            items(list, key = { "inv_cat_${cat}_${it.id}" }) { item ->
-                                ReformedInventoryCard(
-                                    item = item,
-                                    onCardClick = { editingItem = item },
-                                    onUse = { viewModel.useItem(item.id, 1.0) },
-                                    onRestock = { viewModel.restockItem(item.id, 1.0) }
-                                )
-                            }
-                        }
-                    }
-                    InventoryGroupMode.BY_LOCATION -> {
-                        val grouped = items.groupBy { it.location.ifBlank { "Unassigned Spot" } }
-                        grouped.forEach { (loc, list) ->
-                            item(key = "hdr_loc_$loc") {
-                                Row(
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    modifier = Modifier.padding(top = 6.dp, bottom = 2.dp)
-                                ) {
-                                    Surface(shape = RoundedCornerShape(10.dp), color = CobaltBlue, modifier = Modifier.size(28.dp)) {
-                                        Box(contentAlignment = Alignment.Center) {
-                                            Icon(Icons.Default.LocationOn, contentDescription = null, tint = Color.White, modifier = Modifier.size(15.dp))
-                                        }
-                                    }
-                                    Spacer(modifier = Modifier.width(8.dp))
-                                    Text(loc, fontSize = 14.sp, fontWeight = FontWeight.ExtraBold, color = MidnightSlate)
-                                    Spacer(modifier = Modifier.width(6.dp))
-                                    Surface(shape = RoundedCornerShape(8.dp), color = CobaltBlue) {
-                                        Text("${list.size}", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = Color.White, modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp))
-                                    }
-                                }
-                            }
-                            items(list, key = { "inv_loc_${loc}_${it.id}" }) { item ->
-                                ReformedInventoryCard(
-                                    item = item,
-                                    onCardClick = { editingItem = item },
-                                    onUse = { viewModel.useItem(item.id, 1.0) },
-                                    onRestock = { viewModel.restockItem(item.id, 1.0) }
+                            Spacer(modifier = Modifier.height(12.dp))
+                            Text(
+                                text = if (selectedCategory != "All") "No items in $selectedCategory yet" else "No rations match filters",
+                                fontSize = 15.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = DarkSlate
+                            )
+                            Spacer(modifier = Modifier.height(10.dp))
+                            Button(
+                                onClick = { showAddSheet = true },
+                                colors = ButtonDefaults.buttonColors(containerColor = InkBlack),
+                                shape = RoundedCornerShape(20.dp)
+                            ) {
+                                Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(16.dp))
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text(
+                                    text = if (selectedCategory != "All") "Add to $selectedCategory" else "Pick from ${PreplannedCatalog.plannedRations.size}+ Rations",
+                                    fontWeight = FontWeight.Bold
                                 )
                             }
                         }
                     }
                 }
-                item { Spacer(modifier = Modifier.height(16.dp)) }
+            } else {
+                LazyColumn(
+                    modifier = Modifier.fillMaxSize(),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    items(items, key = { "inv_${it.id}" }) { item ->
+                        ReformedInventoryCard(
+                            item = item,
+                            onCardClick = { editingItem = item },
+                            onUse = { viewModel.useItem(item.id, 1.0) },
+                            onRestock = { viewModel.restockItem(item.id, 1.0) }
+                        )
+                    }
+                    item { Spacer(modifier = Modifier.height(16.dp)) }
+                }
             }
         }
     }
 
     if (showAddSheet) {
+        val initialCat = if (selectedCategory != "All") selectedCategory else null
         PreplannedAndCustomAddSheet(
             existingItems = allInventory,
             availableCategories = availableCategories,
@@ -505,7 +576,8 @@ fun InventoryScreen(viewModel: MainViewModel) {
                 viewModel.addNewItem(newItem)
                 Toast.makeText(context, "Added ${newItem.name} to ${newItem.location}", Toast.LENGTH_SHORT).show()
                 showAddSheet = false
-            }
+            },
+            initialCategory = initialCat
         )
     }
 
@@ -564,6 +636,129 @@ fun InventoryScreen(viewModel: MainViewModel) {
                 showNewLocationPrompt = false
             }
         )
+    }
+}
+
+@Composable
+private fun PantryCategoryCard(
+    summary: GroupSummary,
+    onClick: () -> Unit
+) {
+    val visual = categoryVisualFor(summary.name)
+    val icon = PreplannedCatalog.iconForCategory(summary.name)
+    val isFullyReady = summary.readinessPct >= 100 && summary.itemCount > 0
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick),
+        shape = RoundedCornerShape(20.dp),
+        colors = CardDefaults.cardColors(containerColor = CardSurface),
+        border = BorderStroke(1.dp, BorderSlate),
+        elevation = CardDefaults.cardElevation(defaultElevation = 3.dp)
+    ) {
+        Column {
+            if (isFullyReady) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(4.dp)
+                        .background(Brush.linearGradient(listOf(EmeraldDeep, EmeraldVibrant, SuccessGreen)))
+                )
+            }
+            Column(modifier = Modifier.padding(14.dp)) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Surface(
+                        shape = RoundedCornerShape(12.dp),
+                        color = visual.tint,
+                        shadowElevation = 2.dp,
+                        modifier = Modifier.size(42.dp)
+                    ) {
+                        Box(contentAlignment = Alignment.Center) {
+                            Text(icon, fontSize = 20.sp)
+                        }
+                    }
+                    if (summary.lowStockCount > 0) {
+                        Surface(shape = RoundedCornerShape(8.dp), color = DangerRed) {
+                            Text(
+                                text = "${summary.lowStockCount} low",
+                                fontSize = 9.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = Color.White,
+                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                            )
+                        }
+                    } else if (isFullyReady) {
+                        Surface(
+                            shape = RoundedCornerShape(8.dp),
+                            color = EmeraldVibrant.copy(alpha = 0.15f)
+                        ) {
+                            Text(
+                                text = "100%",
+                                fontSize = 9.sp,
+                                fontWeight = FontWeight.ExtraBold,
+                                color = EmeraldDeep,
+                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                            )
+                        }
+                    }
+                }
+                Spacer(modifier = Modifier.height(10.dp))
+                Text(
+                    text = summary.name,
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = MidnightSlate,
+                    maxLines = 1
+                )
+                Spacer(modifier = Modifier.height(2.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "${summary.itemCount} items",
+                        fontSize = 11.sp,
+                        color = LightSlate
+                    )
+                    Text(
+                        text = "${summary.readinessPct}%",
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = when {
+                            isFullyReady -> EmeraldDeep
+                            summary.readinessPct < 70 -> DangerRed
+                            else -> visual.tint
+                        }
+                    )
+                }
+                Spacer(modifier = Modifier.height(6.dp))
+                if (isFullyReady) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(5.dp)
+                            .background(
+                                brush = Brush.linearGradient(listOf(EmeraldDeep, EmeraldVibrant, SuccessGreen)),
+                                shape = RoundedCornerShape(3.dp)
+                            )
+                    )
+                } else {
+                    LinearProgressIndicator(
+                        progress = { (summary.readinessPct / 100f).coerceIn(0f, 1f) },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(5.dp),
+                        color = if (summary.readinessPct < 70) DangerRed else visual.tint,
+                        trackColor = Color(0xFFF1F5F9)
+                    )
+                }
+            }
+        }
     }
 }
 
@@ -743,16 +938,17 @@ fun PreplannedAndCustomAddSheet(
     onCreateCategory: (String) -> Unit,
     onCreateLocation: (String) -> Unit,
     onDismiss: () -> Unit,
-    onConfirm: (InventoryItem) -> Unit
+    onConfirm: (InventoryItem) -> Unit,
+    initialCategory: String? = null
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     var selectedTab by remember { mutableStateOf(0) }
     var catalogSearch by remember { mutableStateOf("") }
-    var catalogCatFilter by remember { mutableStateOf("All") }
+    var catalogCatFilter by remember(initialCategory) { mutableStateOf(initialCategory ?: "All") }
     var destinationArea by remember { mutableStateOf("Auto") }
 
     var name by remember { mutableStateOf("") }
-    var category by remember { mutableStateOf(availableCategories.firstOrNull() ?: "Grains & Pasta") }
+    var category by remember(initialCategory) { mutableStateOf(initialCategory ?: availableCategories.firstOrNull() ?: "Grains & Pasta") }
     var unit by remember { mutableStateOf("lbs") }
     var location by remember { mutableStateOf(availableLocations.firstOrNull() ?: "Main Pantry") }
     var initialQtyStr by remember { mutableStateOf("6") }

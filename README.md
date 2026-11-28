@@ -4,6 +4,20 @@ A native Android application built with **Kotlin**, **Jetpack Compose**, and **M
 
 ---
 
+## ✨ What's New in v1.6.0
+
+- **🎨 Budgetly & Wonder Bites Visual Polish**: Warm off-white & peach/emerald palette, high-contrast black capsule action pills, dashed insight/alert cards, and 100%-ready emerald goal gradients.
+- **🗂️ Categories-First Pantry Grid & Drill-Down Navigation**: Browse emergency rations by category card with item counts and quick drill-down view for effortless pantry inventory navigation.
+- **⚙️ Tabbed Settings with Dedicated Activity Log Tab**: Streamlined Settings screen organized with clean tabs, tucking the detailed sync and event audit trail into its own dedicated Activity tab.
+- **🏠 Smarter Home Dashboard**:
+  - Live Groceries card right on the home screen.
+  - Interactive clickable hero alert pills for quick action.
+  - 2-column Storage Zone health breakdown across all pantry locations.
+  - Top-5 urgent focus list and high-visibility `<30d` urgent expiration strip.
+- **🛡️ Survival Vault Adaptive Launcher Icon**: High-contrast, clean emergency preparedness vault icon supporting modern Android adaptive icon styles.
+
+---
+
 ## 🌟 What's New in v1.4.0
 
 - **🛡️ Mandatory Google Sign-In Gate**:

@@ -67,9 +67,13 @@ import com.emergencysupply.rations.ui.theme.CobaltBlue
 import com.emergencysupply.rations.ui.theme.DangerRed
 import com.emergencysupply.rations.ui.theme.DangerSoft
 import com.emergencysupply.rations.ui.theme.DarkSlate
+import com.emergencysupply.rations.ui.theme.EmeraldDeep
+import com.emergencysupply.rations.ui.theme.EmeraldVibrant
 import com.emergencysupply.rations.ui.theme.LightSlate
 import com.emergencysupply.rations.ui.theme.MediumSlate
 import com.emergencysupply.rations.ui.theme.MidnightSlate
+import com.emergencysupply.rations.ui.theme.PeachSoft
+import com.emergencysupply.rations.ui.theme.PeachTint
 import com.emergencysupply.rations.ui.theme.RoyalBlue
 import com.emergencysupply.rations.ui.theme.SoftTileSurface
 import com.emergencysupply.rations.ui.theme.SuccessGreen
@@ -121,8 +125,12 @@ fun MainScreen(
     } else {
         Scaffold(
             topBar = {
-                // Frosted clean Dribbble/Finance style header
-                Surface(color = BackgroundSurface) {
+                // Budgetly warm peach-to-cream header gradient
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(Brush.verticalGradient(listOf(PeachSoft, BackgroundSurface)))
+                ) {
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -364,7 +372,7 @@ fun AuthGateScreen(
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Center
         ) {
-            // Hero Cobalt/Teal gradient shield/lock card
+            // Hero Wonder Bites Emerald gradient shield/lock card
             Card(
                 shape = RoundedCornerShape(28.dp),
                 modifier = Modifier.fillMaxWidth(),
@@ -376,7 +384,7 @@ fun AuthGateScreen(
                         .fillMaxWidth()
                         .background(
                             brush = Brush.linearGradient(
-                                colors = listOf(CobaltBlue, RoyalBlue, TealPrimary)
+                                colors = listOf(EmeraldDeep, EmeraldVibrant, TealPrimary)
                             )
                         )
                         .padding(horizontal = 24.dp, vertical = 32.dp),
@@ -388,8 +396,8 @@ fun AuthGateScreen(
                     ) {
                         Surface(
                             shape = CircleShape,
-                            color = Color.White.copy(alpha = 0.2f),
-                            border = BorderStroke(1.5.dp, Color.White.copy(alpha = 0.4f)),
+                            color = PeachSoft.copy(alpha = 0.22f),
+                            border = BorderStroke(1.5.dp, Color.White.copy(alpha = 0.5f)),
                             modifier = Modifier.size(72.dp)
                         ) {
                             Box(contentAlignment = Alignment.Center) {
@@ -413,8 +421,8 @@ fun AuthGateScreen(
 
                         Surface(
                             shape = RoundedCornerShape(12.dp),
-                            color = Color.White.copy(alpha = 0.18f),
-                            border = BorderStroke(1.dp, Color.White.copy(alpha = 0.3f))
+                            color = PeachSoft.copy(alpha = 0.2f),
+                            border = BorderStroke(1.dp, PeachTint.copy(alpha = 0.4f))
                         ) {
                             Text(
                                 text = "Authorized Family Access Only",
@@ -487,7 +495,7 @@ fun AuthGateScreen(
                     .fillMaxWidth()
                     .height(56.dp),
                 shape = RoundedCornerShape(16.dp),
-                colors = ButtonDefaults.buttonColors(containerColor = CobaltBlue),
+                colors = ButtonDefaults.buttonColors(containerColor = EmeraldDeep),
                 elevation = ButtonDefaults.buttonElevation(defaultElevation = 3.dp)
             ) {
                 Row(
