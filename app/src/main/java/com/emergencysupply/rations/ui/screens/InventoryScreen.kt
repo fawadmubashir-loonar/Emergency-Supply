@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -39,24 +40,24 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilterChipDefaults
-import androidx.compose.material3.FloatingActionButton
-import androidx.compose.material3.FloatingActionButtonDefaults
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
-import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Tab
 import androidx.compose.material3.TabRow
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -71,19 +72,22 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.emergencysupply.rations.data.PlannedRationTemplate
 import com.emergencysupply.rations.data.PreplannedCatalog
 import com.emergencysupply.rations.data.local.entity.InventoryItem
 import com.emergencysupply.rations.ui.MainViewModel
-import com.emergencysupply.rations.ui.theme.BackgroundSurface
+import com.emergencysupply.rations.ui.components.ScrollableWheelDatePicker
+import com.emergencysupply.rations.ui.components.categoryVisualFor
 import com.emergencysupply.rations.ui.theme.BorderSlate
 import com.emergencysupply.rations.ui.theme.CardSurface
 import com.emergencysupply.rations.ui.theme.DangerRed
 import com.emergencysupply.rations.ui.theme.DangerSoft
 import com.emergencysupply.rations.ui.theme.DarkSlate
+import com.emergencysupply.rations.ui.theme.InkBlack
 import com.emergencysupply.rations.ui.theme.LightSlate
 import com.emergencysupply.rations.ui.theme.MediumSlate
 import com.emergencysupply.rations.ui.theme.MidnightSlate
+import com.emergencysupply.rations.ui.theme.OrangeAccent
+import com.emergencysupply.rations.ui.theme.SoftTileSurface
 import com.emergencysupply.rations.ui.theme.SuccessGreen
 import com.emergencysupply.rations.ui.theme.SuccessSoft
 import com.emergencysupply.rations.ui.theme.TealPrimary
@@ -93,6 +97,12 @@ import com.emergencysupply.rations.ui.theme.WarningSoft
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 import java.util.UUID
+
+enum class InventoryGroupMode(val label: String) {
+    LIST("All"),
+    BY_CATEGORY("By Category"),
+    BY_LOCATION("By Spot")
+}
 
 @Composable
 fun InventoryScreen(viewModel: MainViewModel) {
@@ -107,186 +117,244 @@ fun InventoryScreen(viewModel: MainViewModel) {
     val availableCategories by viewModel.availableCategories.collectAsState()
     val availableLocations by viewModel.availableLocations.collectAsState()
 
-    var showAddDialog by remember { mutableStateOf(false) }
+    var groupMode by remember { mutableStateOf(InventoryGroupMode.LIST) }
+    var showAddSheet by remember { mutableStateOf(false) }
     var editingItem by remember { mutableStateOf<InventoryItem?>(null) }
     var showNewCategoryPrompt by remember { mutableStateOf(false) }
     var showNewLocationPrompt by remember { mutableStateOf(false) }
 
-    Scaffold(
-        floatingActionButton = {
-            FloatingActionButton(
-                onClick = { showAddDialog = true },
-                containerColor = TealPrimary,
-                contentColor = Color.White,
-                shape = CircleShape,
-                elevation = FloatingActionButtonDefaults.elevation(defaultElevation = 4.dp)
-            ) {
-                Icon(imageVector = Icons.Default.Add, contentDescription = "Add Ration", modifier = Modifier.size(24.dp))
-            }
-        },
-        containerColor = BackgroundSurface
-    ) { padding ->
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(padding)
-                .padding(horizontal = 16.dp, vertical = 8.dp)
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(horizontal = 16.dp)
+    ) {
+        // 1. Sleek Logistics-style Search Pill + Inline "+ Add" Pill Button
+        Surface(
+            shape = RoundedCornerShape(18.dp),
+            color = CardSurface,
+            shadowElevation = 2.dp,
+            border = BorderStroke(1.dp, BorderSlate.copy(alpha = 0.6f)),
+            modifier = Modifier.fillMaxWidth()
         ) {
-            // 1. Clean Rounded Search Bar
-            OutlinedTextField(
-                value = searchQuery,
-                onValueChange = { viewModel.searchQuery.value = it },
-                modifier = Modifier.fillMaxWidth(),
-                placeholder = { Text("Search rations, category, or location...", fontSize = 13.sp, color = LightSlate) },
-                leadingIcon = {
-                    Icon(imageVector = Icons.Default.Search, contentDescription = null, tint = MediumSlate, modifier = Modifier.size(20.dp))
-                },
-                trailingIcon = {
-                    if (searchQuery.isNotEmpty()) {
-                        IconButton(onClick = { viewModel.searchQuery.value = "" }) {
-                            Icon(imageVector = Icons.Default.Clear, contentDescription = "Clear", tint = MediumSlate, modifier = Modifier.size(18.dp))
-                        }
-                    }
-                },
-                singleLine = true,
-                shape = RoundedCornerShape(14.dp),
-                colors = OutlinedTextFieldDefaults.colors(
-                    focusedBorderColor = TealPrimary,
-                    unfocusedBorderColor = BorderSlate,
-                    focusedContainerColor = CardSurface,
-                    unfocusedContainerColor = CardSurface
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 10.dp, vertical = 6.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Search,
+                    contentDescription = null,
+                    tint = LightSlate,
+                    modifier = Modifier.padding(start = 6.dp).size(20.dp)
                 )
+                OutlinedTextField(
+                    value = searchQuery,
+                    onValueChange = { viewModel.searchQuery.value = it },
+                    placeholder = { Text("Search rations...", fontSize = 13.sp, color = LightSlate) },
+                    singleLine = true,
+                    trailingIcon = {
+                        if (searchQuery.isNotEmpty()) {
+                            IconButton(onClick = { viewModel.searchQuery.value = "" }) {
+                                Icon(Icons.Default.Clear, contentDescription = "Clear", modifier = Modifier.size(16.dp))
+                            }
+                        }
+                    },
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedBorderColor = Color.Transparent,
+                        unfocusedBorderColor = Color.Transparent,
+                        focusedContainerColor = Color.Transparent,
+                        unfocusedContainerColor = Color.Transparent
+                    ),
+                    modifier = Modifier.weight(1f)
+                )
+                Button(
+                    onClick = { showAddSheet = true },
+                    shape = RoundedCornerShape(14.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = OrangeAccent),
+                    modifier = Modifier.height(40.dp)
+                ) {
+                    Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(16.dp))
+                    Spacer(modifier = Modifier.width(3.dp))
+                    Text("Add", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                }
+            }
+        }
+
+        Spacer(modifier = Modifier.height(10.dp))
+
+        // 2. View Group Switcher (All / By Category / By Spot) + Item Count
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                InventoryGroupMode.values().forEach { mode ->
+                    val isSel = groupMode == mode
+                    Surface(
+                        shape = RoundedCornerShape(12.dp),
+                        color = if (isSel) InkBlack else CardSurface,
+                        border = BorderStroke(1.dp, if (isSel) InkBlack else BorderSlate),
+                        modifier = Modifier.clickable { groupMode = mode }
+                    ) {
+                        Text(
+                            text = mode.label,
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = if (isSel) Color.White else MediumSlate,
+                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
+                        )
+                    }
+                }
+            }
+
+            Text(
+                text = "${items.size} items",
+                fontSize = 12.sp,
+                fontWeight = FontWeight.Bold,
+                color = MediumSlate
             )
+        }
 
-            Spacer(modifier = Modifier.height(10.dp))
+        Spacer(modifier = Modifier.height(8.dp))
 
-            // 2. Dynamic Category Filter Row + Add Category Chip
-            LazyRow(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(6.dp)
-            ) {
-                item {
-                    val isAll = selectedCategory == "All"
-                    FilterChip(
-                        selected = isAll,
-                        onClick = { viewModel.categoryFilter.value = "All" },
-                        label = { Text("All", fontSize = 12.sp, fontWeight = if (isAll) FontWeight.Bold else FontWeight.Medium) },
-                        shape = RoundedCornerShape(20.dp),
-                        colors = FilterChipDefaults.filterChipColors(
-                            selectedContainerColor = TealPrimary,
-                            selectedLabelColor = Color.White,
-                            containerColor = CardSurface,
-                            labelColor = DarkSlate
-                        ),
-                        border = BorderStroke(1.dp, if (isAll) TealPrimary else BorderSlate)
-                    )
-                }
-
-                items(availableCategories) { cat ->
-                    val isSelected = selectedCategory.equals(cat, ignoreCase = true)
-                    val icon = PreplannedCatalog.iconForCategory(cat)
-                    FilterChip(
-                        selected = isSelected,
-                        onClick = { viewModel.categoryFilter.value = cat },
-                        label = { Text("$icon $cat", fontSize = 12.sp, fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium) },
-                        shape = RoundedCornerShape(20.dp),
-                        colors = FilterChipDefaults.filterChipColors(
-                            selectedContainerColor = TealPrimary,
-                            selectedLabelColor = Color.White,
-                            containerColor = CardSurface,
-                            labelColor = DarkSlate
-                        ),
-                        border = BorderStroke(1.dp, if (isSelected) TealPrimary else BorderSlate)
-                    )
-                }
-
-                item {
-                    FilterChip(
-                        selected = false,
-                        onClick = { showNewCategoryPrompt = true },
-                        label = { Text("+ New Category", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = TealPrimary) },
-                        shape = RoundedCornerShape(20.dp),
-                        colors = FilterChipDefaults.filterChipColors(containerColor = TealSoft),
-                        border = BorderStroke(1.dp, TealPrimary.copy(alpha = 0.35f))
+        // 3. AgroPulse-style Pill Category Tabs + "+ Category"
+        LazyRow(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(6.dp)
+        ) {
+            item {
+                val isAll = selectedCategory == "All"
+                Surface(
+                    shape = RoundedCornerShape(20.dp),
+                    color = if (isAll) OrangeAccent else CardSurface,
+                    border = BorderStroke(1.dp, if (isAll) OrangeAccent else BorderSlate),
+                    modifier = Modifier.clickable { viewModel.categoryFilter.value = "All" }
+                ) {
+                    Text(
+                        text = "All Categories",
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = if (isAll) Color.White else DarkSlate,
+                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 7.dp)
                     )
                 }
             }
 
+            items(availableCategories) { cat ->
+                val isSel = selectedCategory.equals(cat, ignoreCase = true)
+                val icon = PreplannedCatalog.iconForCategory(cat)
+                Surface(
+                    shape = RoundedCornerShape(20.dp),
+                    color = if (isSel) OrangeAccent else CardSurface,
+                    border = BorderStroke(1.dp, if (isSel) OrangeAccent else BorderSlate),
+                    modifier = Modifier.clickable { viewModel.categoryFilter.value = cat }
+                ) {
+                    Text(
+                        text = "$icon $cat",
+                        fontSize = 12.sp,
+                        fontWeight = if (isSel) FontWeight.Bold else FontWeight.Medium,
+                        color = if (isSel) Color.White else DarkSlate,
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 7.dp)
+                    )
+                }
+            }
+
+            item {
+                Surface(
+                    shape = RoundedCornerShape(20.dp),
+                    color = TealSoft,
+                    border = BorderStroke(1.dp, TealPrimary.copy(alpha = 0.35f)),
+                    modifier = Modifier.clickable { showNewCategoryPrompt = true }
+                ) {
+                    Text(
+                        text = "+ New Category",
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = TealPrimary,
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 7.dp)
+                    )
+                }
+            }
+        }
+
+        Spacer(modifier = Modifier.height(6.dp))
+
+        // 4. Scrollable Storage Spot Pills + "+ Spot"
+        LazyRow(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(6.dp)
+        ) {
+            item {
+                val isAll = selectedLocation == "All"
+                Surface(
+                    shape = RoundedCornerShape(18.dp),
+                    color = if (isAll) TealPrimary else CardSurface,
+                    border = BorderStroke(1.dp, if (isAll) TealPrimary else BorderSlate),
+                    modifier = Modifier.clickable { viewModel.locationFilter.value = "All" }
+                ) {
+                    Text(
+                        text = "All Spots",
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = if (isAll) Color.White else MediumSlate,
+                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp)
+                    )
+                }
+            }
+
+            items(availableLocations) { loc ->
+                val isSel = selectedLocation.equals(loc, ignoreCase = true)
+                Surface(
+                    shape = RoundedCornerShape(18.dp),
+                    color = if (isSel) TealPrimary else CardSurface,
+                    border = BorderStroke(1.dp, if (isSel) TealPrimary else BorderSlate),
+                    modifier = Modifier.clickable { viewModel.locationFilter.value = loc }
+                ) {
+                    Text(
+                        text = "📍 $loc",
+                        fontSize = 11.sp,
+                        fontWeight = if (isSel) FontWeight.Bold else FontWeight.Normal,
+                        color = if (isSel) Color.White else MediumSlate,
+                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp)
+                    )
+                }
+            }
+
+            item {
+                Surface(
+                    shape = RoundedCornerShape(18.dp),
+                    color = SoftTileSurface,
+                    border = BorderStroke(1.dp, BorderSlate),
+                    modifier = Modifier.clickable { showNewLocationPrompt = true }
+                ) {
+                    Text(
+                        text = "+ Spot",
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = DarkSlate,
+                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp)
+                    )
+                }
+            }
+        }
+
+        if (lowStockOnly || expiringOnly || searchQuery.isNotEmpty() || selectedCategory != "All" || selectedLocation != "All") {
             Spacer(modifier = Modifier.height(6.dp))
-
-            // 3. Dynamic Location Filter Row + Add Location Chip
-            LazyRow(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(6.dp)
-            ) {
-                item {
-                    val isAll = selectedLocation == "All"
-                    FilterChip(
-                        selected = isAll,
-                        onClick = { viewModel.locationFilter.value = "All" },
-                        label = { Text("All Locations", fontSize = 11.sp, fontWeight = if (isAll) FontWeight.Bold else FontWeight.Normal) },
-                        shape = RoundedCornerShape(20.dp),
-                        colors = FilterChipDefaults.filterChipColors(
-                            selectedContainerColor = DarkSlate,
-                            selectedLabelColor = Color.White,
-                            containerColor = CardSurface,
-                            labelColor = MediumSlate
-                        ),
-                        border = BorderStroke(1.dp, if (isAll) DarkSlate else BorderSlate)
-                    )
-                }
-
-                items(availableLocations) { loc ->
-                    val isSelected = selectedLocation.equals(loc, ignoreCase = true)
-                    FilterChip(
-                        selected = isSelected,
-                        onClick = { viewModel.locationFilter.value = loc },
-                        label = { Text("📍 $loc", fontSize = 11.sp, fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal) },
-                        shape = RoundedCornerShape(20.dp),
-                        colors = FilterChipDefaults.filterChipColors(
-                            selectedContainerColor = DarkSlate,
-                            selectedLabelColor = Color.White,
-                            containerColor = CardSurface,
-                            labelColor = MediumSlate
-                        ),
-                        border = BorderStroke(1.dp, if (isSelected) DarkSlate else BorderSlate)
-                    )
-                }
-
-                item {
-                    FilterChip(
-                        selected = false,
-                        onClick = { showNewLocationPrompt = true },
-                        label = { Text("+ Location", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = DarkSlate) },
-                        shape = RoundedCornerShape(20.dp),
-                        colors = FilterChipDefaults.filterChipColors(containerColor = Color(0xFFF1F5F9)),
-                        border = BorderStroke(1.dp, BorderSlate)
-                    )
-                }
-            }
-
-            Spacer(modifier = Modifier.height(8.dp))
-
-            // Active status pills + Reset row
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    Text(
-                        text = "${items.size} rations",
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = MediumSlate
-                    )
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     if (lowStockOnly) {
                         Surface(
                             shape = RoundedCornerShape(8.dp),
                             color = DangerSoft,
                             modifier = Modifier.clickable { viewModel.lowStockOnlyFilter.value = false }
                         ) {
-                            Text("Low Stock Only ✕", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = DangerRed, modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp))
+                            Text("Low Par ✕", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = DangerRed, modifier = Modifier.padding(horizontal = 7.dp, vertical = 3.dp))
                         }
                     }
                     if (expiringOnly) {
@@ -295,104 +363,157 @@ fun InventoryScreen(viewModel: MainViewModel) {
                             color = WarningSoft,
                             modifier = Modifier.clickable { viewModel.expiringOnlyFilter.value = false }
                         ) {
-                            Text("Expiring Soon ✕", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = WarningAmber, modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp))
+                            Text("Expiring Soon ✕", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = WarningAmber, modifier = Modifier.padding(horizontal = 7.dp, vertical = 3.dp))
                         }
                     }
                 }
+                Text(
+                    text = "Reset All",
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = TealPrimary,
+                    modifier = Modifier.clickable {
+                        viewModel.searchQuery.value = ""
+                        viewModel.categoryFilter.value = "All"
+                        viewModel.locationFilter.value = "All"
+                        viewModel.lowStockOnlyFilter.value = false
+                        viewModel.expiringOnlyFilter.value = false
+                    }
+                )
+            }
+        }
 
-                if (searchQuery.isNotEmpty() || selectedCategory != "All" || selectedLocation != "All" || lowStockOnly || expiringOnly) {
-                    Text(
-                        text = "Reset Filters",
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = TealPrimary,
-                        modifier = Modifier.clickable {
-                            viewModel.searchQuery.value = ""
-                            viewModel.categoryFilter.value = "All"
-                            viewModel.locationFilter.value = "All"
-                            viewModel.lowStockOnlyFilter.value = false
-                            viewModel.expiringOnlyFilter.value = false
+        Spacer(modifier = Modifier.height(8.dp))
+
+        // 5. Inventory List (Flat or Grouped)
+        if (items.isEmpty()) {
+            Box(
+                modifier = Modifier.fillMaxSize().padding(top = 36.dp),
+                contentAlignment = Alignment.TopCenter
+            ) {
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Surface(shape = CircleShape, color = CardSurface, shadowElevation = 2.dp, modifier = Modifier.size(60.dp)) {
+                        Box(contentAlignment = Alignment.Center) {
+                            Icon(Icons.Default.FilterList, contentDescription = null, tint = LightSlate, modifier = Modifier.size(26.dp))
                         }
-                    )
+                    }
+                    Spacer(modifier = Modifier.height(12.dp))
+                    Text("No rations match these filters", fontSize = 15.sp, fontWeight = FontWeight.Bold, color = DarkSlate)
+                    Spacer(modifier = Modifier.height(10.dp))
+                    Button(
+                        onClick = { showAddSheet = true },
+                        colors = ButtonDefaults.buttonColors(containerColor = TealPrimary),
+                        shape = RoundedCornerShape(14.dp)
+                    ) {
+                        Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(16.dp))
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text("Pick from Pre-Planned Catalog")
+                    }
                 }
             }
-
-            Spacer(modifier = Modifier.height(8.dp))
-
-            // 4. Inventory List
-            if (items.isEmpty()) {
-                Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(top = 40.dp),
-                    contentAlignment = Alignment.TopCenter
-                ) {
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Surface(
-                            shape = CircleShape,
-                            color = Color(0xFFF1F5F9),
-                            modifier = Modifier.size(56.dp)
-                        ) {
-                            Box(contentAlignment = Alignment.Center) {
-                                Icon(imageVector = Icons.Default.FilterList, contentDescription = null, tint = LightSlate, modifier = Modifier.size(28.dp))
+        } else {
+            LazyColumn(
+                modifier = Modifier.fillMaxSize(),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                when (groupMode) {
+                    InventoryGroupMode.LIST -> {
+                        items(items, key = { "inv_${it.id}" }) { item ->
+                            ReformedInventoryCard(
+                                item = item,
+                                onCardClick = { editingItem = item },
+                                onUse = { viewModel.useItem(item.id, 1.0) },
+                                onRestock = { viewModel.restockItem(item.id, 1.0) }
+                            )
+                        }
+                    }
+                    InventoryGroupMode.BY_CATEGORY -> {
+                        val grouped = items.groupBy { it.category.ifBlank { "Uncategorized" } }
+                        grouped.forEach { (cat, list) ->
+                            item(key = "hdr_cat_$cat") {
+                                val visual = categoryVisualFor(cat)
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    modifier = Modifier.padding(top = 6.dp, bottom = 2.dp)
+                                ) {
+                                    Surface(shape = CircleShape, color = visual.softBg, modifier = Modifier.size(28.dp)) {
+                                        Box(contentAlignment = Alignment.Center) {
+                                            Text(PreplannedCatalog.iconForCategory(cat), fontSize = 14.sp)
+                                        }
+                                    }
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Text(cat, fontSize = 14.sp, fontWeight = FontWeight.ExtraBold, color = MidnightSlate)
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Surface(shape = RoundedCornerShape(8.dp), color = visual.softBg) {
+                                        Text("${list.size}", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = visual.tint, modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp))
+                                    }
+                                }
+                            }
+                            items(list, key = { "inv_cat_${cat}_${it.id}" }) { item ->
+                                ReformedInventoryCard(
+                                    item = item,
+                                    onCardClick = { editingItem = item },
+                                    onUse = { viewModel.useItem(item.id, 1.0) },
+                                    onRestock = { viewModel.restockItem(item.id, 1.0) }
+                                )
                             }
                         }
-                        Spacer(modifier = Modifier.height(12.dp))
-                        Text(
-                            text = "No rations match your filters.",
-                            style = MaterialTheme.typography.bodyLarge,
-                            fontWeight = FontWeight.Medium,
-                            color = DarkSlate
-                        )
-                        Spacer(modifier = Modifier.height(10.dp))
-                        Button(
-                            onClick = { showAddDialog = true },
-                            colors = ButtonDefaults.buttonColors(containerColor = TealPrimary),
-                            shape = RoundedCornerShape(10.dp)
-                        ) {
-                            Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(18.dp))
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Text("Add From Pre-Planned List")
+                    }
+                    InventoryGroupMode.BY_LOCATION -> {
+                        val grouped = items.groupBy { it.location.ifBlank { "Unassigned Spot" } }
+                        grouped.forEach { (loc, list) ->
+                            item(key = "hdr_loc_$loc") {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    modifier = Modifier.padding(top = 6.dp, bottom = 2.dp)
+                                ) {
+                                    Surface(shape = CircleShape, color = TealSoft, modifier = Modifier.size(28.dp)) {
+                                        Box(contentAlignment = Alignment.Center) {
+                                            Icon(Icons.Default.LocationOn, contentDescription = null, tint = TealPrimary, modifier = Modifier.size(15.dp))
+                                        }
+                                    }
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Text(loc, fontSize = 14.sp, fontWeight = FontWeight.ExtraBold, color = MidnightSlate)
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Surface(shape = RoundedCornerShape(8.dp), color = TealSoft) {
+                                        Text("${list.size}", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = TealPrimary, modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp))
+                                    }
+                                }
+                            }
+                            items(list, key = { "inv_loc_${loc}_${it.id}" }) { item ->
+                                ReformedInventoryCard(
+                                    item = item,
+                                    onCardClick = { editingItem = item },
+                                    onUse = { viewModel.useItem(item.id, 1.0) },
+                                    onRestock = { viewModel.restockItem(item.id, 1.0) }
+                                )
+                            }
                         }
                     }
                 }
-            } else {
-                LazyColumn(
-                    modifier = Modifier.fillMaxSize(),
-                    verticalArrangement = Arrangement.spacedBy(10.dp)
-                ) {
-                    items(items, key = { "inv_${it.id}" }) { item ->
-                        ReformedInventoryCard(
-                            item = item,
-                            onCardClick = { editingItem = item },
-                            onUse = { viewModel.useItem(item.id, 1.0) },
-                            onRestock = { viewModel.restockItem(item.id, 1.0) }
-                        )
-                    }
-                    item { Spacer(modifier = Modifier.height(72.dp)) }
-                }
+                item { Spacer(modifier = Modifier.height(16.dp)) }
             }
         }
     }
 
-    if (showAddDialog) {
-        PreplannedAndCustomAddDialog(
+    if (showAddSheet) {
+        PreplannedAndCustomAddSheet(
             existingItems = allInventory,
             availableCategories = availableCategories,
             availableLocations = availableLocations,
             onCreateCategory = { viewModel.addCustomCategory(it) },
             onCreateLocation = { viewModel.addCustomLocation(it) },
-            onDismiss = { showAddDialog = false },
+            onDismiss = { showAddSheet = false },
             onConfirm = { newItem ->
                 viewModel.addNewItem(newItem)
                 Toast.makeText(context, "Added ${newItem.name} to Pantry", Toast.LENGTH_SHORT).show()
-                showAddDialog = false
+                showAddSheet = false
             }
         )
     }
 
     editingItem?.let { current ->
-        InventoryItemEditorDialog(
+        InventoryItemEditorSheet(
             item = current,
             availableCategories = availableCategories,
             availableLocations = availableLocations,
@@ -424,7 +545,7 @@ fun InventoryScreen(viewModel: MainViewModel) {
 
     if (showNewCategoryPrompt) {
         QuickNameDialog(
-            title = "Add Brand New Category",
+            title = "New Category",
             placeholder = "e.g. Halal Frozen Meats",
             onDismiss = { showNewCategoryPrompt = false },
             onConfirm = { catName ->
@@ -437,7 +558,7 @@ fun InventoryScreen(viewModel: MainViewModel) {
 
     if (showNewLocationPrompt) {
         QuickNameDialog(
-            title = "Add Storage Location",
+            title = "New Storage Spot",
             placeholder = "e.g. Basement Freezer #2",
             onDismiss = { showNewLocationPrompt = false },
             onConfirm = { locName ->
@@ -456,48 +577,63 @@ fun ReformedInventoryCard(
     onUse: () -> Unit,
     onRestock: () -> Unit
 ) {
+    val visual = categoryVisualFor(item.category)
     Card(
         modifier = Modifier
             .fillMaxWidth()
             .clickable(onClick = onCardClick),
-        shape = RoundedCornerShape(14.dp),
+        shape = RoundedCornerShape(20.dp),
         colors = CardDefaults.cardColors(containerColor = CardSurface),
-        border = BorderStroke(1.dp, BorderSlate),
-        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
     ) {
-        Column(modifier = Modifier.padding(14.dp)) {
+        Column(modifier = Modifier.padding(16.dp)) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Row(modifier = Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically) {
-                    Text(
-                        text = PreplannedCatalog.iconForCategory(item.category),
-                        fontSize = 18.sp,
-                        modifier = Modifier.padding(end = 8.dp)
-                    )
-                    Text(
-                        text = item.name,
-                        fontSize = 16.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = MidnightSlate
-                    )
+                    Surface(
+                        shape = CircleShape,
+                        color = visual.softBg,
+                        modifier = Modifier.size(40.dp)
+                    ) {
+                        Box(contentAlignment = Alignment.Center) {
+                            Text(PreplannedCatalog.iconForCategory(item.category), fontSize = 18.sp)
+                        }
+                    }
+                    Spacer(modifier = Modifier.width(12.dp))
+                    Column {
+                        Text(
+                            text = item.name,
+                            fontSize = 16.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = MidnightSlate
+                        )
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(
+                                text = item.category,
+                                fontSize = 11.sp,
+                                color = visual.tint,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                            if (item.location.isNotEmpty()) {
+                                Text(text = " • ", fontSize = 11.sp, color = LightSlate)
+                                Text(text = "📍 ${item.location}", fontSize = 11.sp, color = MediumSlate)
+                            }
+                        }
+                    }
                 }
 
                 val (badgeBg, badgeText, badgeColor) = when {
-                    item.isLowStock -> Triple(DangerSoft, "LOW STOCK", DangerRed)
+                    item.isLowStock -> Triple(DangerSoft, "LOW PAR", DangerRed)
                     item.currentQty >= item.parLevel * 1.5 -> Triple(TealSoft, "SURPLUS", TealPrimary)
-                    else -> Triple(SuccessSoft, "IN STOCK", SuccessGreen)
+                    else -> Triple(SuccessSoft, "HEALTHY", SuccessGreen)
                 }
-                Surface(
-                    shape = RoundedCornerShape(6.dp),
-                    color = badgeBg,
-                    modifier = Modifier.padding(start = 8.dp)
-                ) {
+                Surface(shape = RoundedCornerShape(10.dp), color = badgeBg) {
                     Text(
                         text = badgeText,
-                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp),
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
                         fontSize = 10.sp,
                         fontWeight = FontWeight.Bold,
                         color = badgeColor
@@ -505,35 +641,7 @@ fun ReformedInventoryCard(
                 }
             }
 
-            Spacer(modifier = Modifier.height(4.dp))
-
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween, modifier = Modifier.fillMaxWidth()) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(
-                        text = item.category,
-                        fontSize = 12.sp,
-                        color = TealPrimary,
-                        fontWeight = FontWeight.SemiBold
-                    )
-                    if (item.location.isNotEmpty()) {
-                        Text(text = " • ", fontSize = 12.sp, color = LightSlate)
-                        Icon(
-                            imageVector = Icons.Default.LocationOn,
-                            contentDescription = null,
-                            modifier = Modifier.size(12.dp),
-                            tint = LightSlate
-                        )
-                        Text(text = item.location, fontSize = 12.sp, color = MediumSlate)
-                    }
-                }
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(Icons.Default.Edit, contentDescription = "Edit", modifier = Modifier.size(12.dp), tint = LightSlate)
-                    Spacer(modifier = Modifier.width(3.dp))
-                    Text("Tap to edit", fontSize = 10.sp, color = LightSlate)
-                }
-            }
-
-            Spacer(modifier = Modifier.height(10.dp))
+            Spacer(modifier = Modifier.height(12.dp))
 
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -559,99 +667,78 @@ fun ReformedInventoryCard(
 
                     val rawRatio = if (item.parLevel > 0) (item.currentQty / item.parLevel).toFloat() else 1f
                     val progressRatio = if (rawRatio.isNaN() || rawRatio.isInfinite()) 0f else rawRatio.coerceIn(0f, 1f)
-                    val progressColor = if (item.isLowStock) WarningAmber else SuccessGreen
                     LinearProgressIndicator(
                         progress = { progressRatio },
-                        modifier = Modifier
-                            .fillMaxWidth(0.9f)
-                            .height(5.dp),
-                        color = progressColor,
+                        modifier = Modifier.fillMaxWidth(0.88f).height(6.dp),
+                        color = if (item.isLowStock) OrangeAccent else visual.tint,
                         trackColor = Color(0xFFF1F5F9)
                     )
-
-                    if (item.totalServings > 0) {
-                        Spacer(modifier = Modifier.height(4.dp))
-                        Text(
-                            text = "%.0f total servings (%.0f/unit)".format(item.totalServings, item.servingsPerUnit),
-                            fontSize = 11.sp,
-                            color = LightSlate
-                        )
-                    }
                 }
 
-                Row(
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
+                // Tactile Pill Steppers
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
                     Surface(
-                        shape = RoundedCornerShape(10.dp),
-                        color = if (item.currentQty > 0) Color(0xFFF1F5F9) else Color(0xFFF8FAFC),
+                        shape = CircleShape,
+                        color = SoftTileSurface,
                         border = BorderStroke(1.dp, BorderSlate),
-                        modifier = Modifier.size(40.dp)
+                        modifier = Modifier.size(38.dp)
                     ) {
-                        IconButton(
-                            onClick = onUse,
-                            enabled = item.currentQty > 0,
-                            modifier = Modifier.fillMaxSize()
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.Remove,
-                                contentDescription = "Use 1",
-                                tint = if (item.currentQty > 0) DarkSlate else LightSlate,
-                                modifier = Modifier.size(18.dp)
-                            )
+                        IconButton(onClick = onUse, enabled = item.currentQty > 0) {
+                            Icon(Icons.Default.Remove, contentDescription = "Use 1", tint = if (item.currentQty > 0) DarkSlate else LightSlate, modifier = Modifier.size(18.dp))
                         }
                     }
 
                     Surface(
-                        shape = RoundedCornerShape(10.dp),
-                        color = TealSoft,
-                        border = BorderStroke(1.dp, TealPrimary.copy(alpha = 0.3f)),
-                        modifier = Modifier.size(40.dp)
+                        shape = CircleShape,
+                        color = InkBlack,
+                        modifier = Modifier.size(38.dp)
                     ) {
-                        IconButton(
-                            onClick = onRestock,
-                            modifier = Modifier.fillMaxSize()
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.Add,
-                                contentDescription = "Restock 1",
-                                tint = TealPrimary,
-                                modifier = Modifier.size(18.dp)
-                            )
+                        IconButton(onClick = onRestock) {
+                            Icon(Icons.Default.Add, contentDescription = "Restock 1", tint = Color.White, modifier = Modifier.size(18.dp))
                         }
                     }
                 }
             }
 
-            if (!item.earliestExpiry.isNullOrEmpty()) {
-                Spacer(modifier = Modifier.height(8.dp))
-                val expColor = if (item.isExpired) DangerRed else if (item.isExpiringSoon) WarningAmber else SuccessGreen
-                val expBadgeBg = if (item.isExpired) DangerSoft else if (item.isExpiringSoon) WarningSoft else SuccessSoft
-                Surface(
-                    shape = RoundedCornerShape(6.dp),
-                    color = expBadgeBg
-                ) {
-                    val expText = when {
-                        item.isExpired -> "EXPIRED: ${item.earliestExpiry}"
-                        item.daysUntilExpiry != null -> "Expires: ${item.earliestExpiry} (${item.daysUntilExpiry} days left)"
-                        else -> "Expires: ${item.earliestExpiry}"
+            Spacer(modifier = Modifier.height(8.dp))
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                if (!item.earliestExpiry.isNullOrEmpty()) {
+                    val expColor = if (item.isExpired) DangerRed else if (item.isExpiringSoon) WarningAmber else SuccessGreen
+                    val expBg = if (item.isExpired) DangerSoft else if (item.isExpiringSoon) WarningSoft else SuccessSoft
+                    Surface(shape = RoundedCornerShape(8.dp), color = expBg) {
+                        val expText = when {
+                            item.isExpired -> "EXPIRED (${item.earliestExpiry})"
+                            item.daysUntilExpiry != null -> "Exp: ${item.earliestExpiry} (${item.daysUntilExpiry}d)"
+                            else -> "Exp: ${item.earliestExpiry}"
+                        }
+                        Text(expText, fontSize = 10.sp, fontWeight = FontWeight.Bold, color = expColor, modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp))
                     }
+                } else {
                     Text(
-                        text = expText,
+                        text = if (item.totalServings > 0) "%.0f servings".format(item.totalServings) else "",
                         fontSize = 11.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = expColor,
-                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp)
+                        color = LightSlate
                     )
+                }
+
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Default.Edit, contentDescription = null, modifier = Modifier.size(12.dp), tint = LightSlate)
+                    Spacer(modifier = Modifier.width(3.dp))
+                    Text("Tap to edit", fontSize = 11.sp, fontWeight = FontWeight.Medium, color = LightSlate)
                 }
             }
         }
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun PreplannedAndCustomAddDialog(
+fun PreplannedAndCustomAddSheet(
     existingItems: List<InventoryItem>,
     availableCategories: List<String>,
     availableLocations: List<String>,
@@ -660,10 +747,10 @@ fun PreplannedAndCustomAddDialog(
     onDismiss: () -> Unit,
     onConfirm: (InventoryItem) -> Unit
 ) {
-    var selectedTab by remember { mutableStateOf(0) } // 0 = Pre-Planned Catalog, 1 = Custom Item
+    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    var selectedTab by remember { mutableStateOf(0) }
     var catalogSearch by remember { mutableStateOf("") }
 
-    // Custom Form State
     var name by remember { mutableStateOf("") }
     var category by remember { mutableStateOf(availableCategories.firstOrNull() ?: "Grains & Pasta") }
     var unit by remember { mutableStateOf("lbs") }
@@ -679,61 +766,68 @@ fun PreplannedAndCustomAddDialog(
 
     val existingNames = remember(existingItems) { existingItems.map { it.name.trim().lowercase() }.toSet() }
 
-    AlertDialog(
+    ModalBottomSheet(
         onDismissRequest = onDismiss,
-        shape = RoundedCornerShape(18.dp),
-        containerColor = Color.White,
-        title = {
-            Column {
-                Text("Add Pantry Ration", fontWeight = FontWeight.Bold, fontSize = 18.sp, color = MidnightSlate)
-                Spacer(modifier = Modifier.height(8.dp))
-                TabRow(
-                    selectedTabIndex = selectedTab,
-                    containerColor = Color(0xFFF8FAFC),
-                    contentColor = TealPrimary
-                ) {
-                    Tab(
-                        selected = selectedTab == 0,
-                        onClick = { selectedTab = 0 },
-                        text = { Text("Pre-Planned (${PreplannedCatalog.plannedRations.size})", fontSize = 12.sp, fontWeight = FontWeight.Bold) }
-                    )
-                    Tab(
-                        selected = selectedTab == 1,
-                        onClick = { selectedTab = 1 },
-                        text = { Text("Custom / New", fontSize = 12.sp, fontWeight = FontWeight.Bold) }
-                    )
-                }
+        sheetState = sheetState,
+        containerColor = CardSurface,
+        shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp)
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .navigationBarsPadding()
+                .padding(horizontal = 20.dp)
+                .padding(bottom = 24.dp)
+        ) {
+            Text("Add Pantry Ration", fontWeight = FontWeight.ExtraBold, fontSize = 20.sp, color = MidnightSlate)
+            Spacer(modifier = Modifier.height(10.dp))
+
+            TabRow(
+                selectedTabIndex = selectedTab,
+                containerColor = SoftTileSurface,
+                contentColor = InkBlack
+            ) {
+                Tab(
+                    selected = selectedTab == 0,
+                    onClick = { selectedTab = 0 },
+                    text = { Text("Pre-Planned (${PreplannedCatalog.plannedRations.size})", fontSize = 12.sp, fontWeight = FontWeight.Bold) }
+                )
+                Tab(
+                    selected = selectedTab == 1,
+                    onClick = { selectedTab = 1 },
+                    text = { Text("Custom / New", fontSize = 12.sp, fontWeight = FontWeight.Bold) }
+                )
             }
-        },
-        text = {
+
+            Spacer(modifier = Modifier.height(12.dp))
+
             if (selectedTab == 0) {
-                // Scrollable Pre-Planned Family Items List
                 val filteredTemplates = PreplannedCatalog.plannedRations.filter {
                     catalogSearch.isBlank() ||
                         it.name.contains(catalogSearch, ignoreCase = true) ||
                         it.category.contains(catalogSearch, ignoreCase = true)
                 }
-                Column(modifier = Modifier.fillMaxWidth().heightIn(max = 420.dp)) {
+                Column(modifier = Modifier.fillMaxWidth().heightIn(max = 460.dp)) {
                     OutlinedTextField(
                         value = catalogSearch,
                         onValueChange = { catalogSearch = it },
-                        placeholder = { Text("Filter pre-planned foods...", fontSize = 12.sp) },
+                        placeholder = { Text("Filter pre-planned items...", fontSize = 13.sp) },
                         singleLine = true,
-                        shape = RoundedCornerShape(10.dp),
+                        shape = RoundedCornerShape(14.dp),
                         modifier = Modifier.fillMaxWidth()
                     )
-                    Spacer(modifier = Modifier.height(8.dp))
+                    Spacer(modifier = Modifier.height(10.dp))
                     LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         items(filteredTemplates, key = { it.id }) { tpl ->
                             val alreadyIn = existingNames.contains(tpl.name.lowercase())
+                            val visual = categoryVisualFor(tpl.category)
                             Surface(
-                                shape = RoundedCornerShape(12.dp),
-                                color = if (alreadyIn) Color(0xFFF8FAFC) else CardSurface,
+                                shape = RoundedCornerShape(16.dp),
+                                color = if (alreadyIn) SoftTileSurface else CardSurface,
                                 border = BorderStroke(1.dp, BorderSlate),
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .clickable {
-                                        // Pre-fill Custom tab so user can tweak before adding if desired
                                         name = tpl.name
                                         category = tpl.category
                                         unit = tpl.unit
@@ -749,31 +843,28 @@ fun PreplannedAndCustomAddDialog(
                                     }
                             ) {
                                 Row(
-                                    modifier = Modifier.padding(10.dp),
+                                    modifier = Modifier.padding(12.dp),
                                     verticalAlignment = Alignment.CenterVertically,
                                     horizontalArrangement = Arrangement.SpaceBetween
                                 ) {
-                                    Column(modifier = Modifier.weight(1f)) {
-                                        Text(
-                                            text = "${PreplannedCatalog.iconForCategory(tpl.category)} ${tpl.name}",
-                                            fontSize = 13.sp,
-                                            fontWeight = FontWeight.Bold,
-                                            color = MidnightSlate
-                                        )
-                                        Text(
-                                            text = "${tpl.category} • Par: %.0f ${tpl.unit} • 📍 ${tpl.location}".format(tpl.parLevel),
-                                            fontSize = 11.sp,
-                                            color = MediumSlate
-                                        )
+                                    Row(modifier = Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically) {
+                                        Surface(shape = CircleShape, color = visual.softBg, modifier = Modifier.size(36.dp)) {
+                                            Box(contentAlignment = Alignment.Center) {
+                                                Text(PreplannedCatalog.iconForCategory(tpl.category), fontSize = 16.sp)
+                                            }
+                                        }
+                                        Spacer(modifier = Modifier.width(10.dp))
+                                        Column {
+                                            Text(tpl.name, fontSize = 14.sp, fontWeight = FontWeight.Bold, color = MidnightSlate)
+                                            Text("${tpl.category} • Par: %.0f ${tpl.unit}".format(tpl.parLevel), fontSize = 11.sp, color = MediumSlate)
+                                        }
                                     }
-                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Spacer(modifier = Modifier.width(8.dp))
                                     Button(
                                         onClick = { onConfirm(tpl.toInventoryItem()) },
-                                        shape = RoundedCornerShape(8.dp),
-                                        colors = ButtonDefaults.buttonColors(
-                                            containerColor = if (alreadyIn) DarkSlate else TealPrimary
-                                        ),
-                                        modifier = Modifier.height(34.dp)
+                                        shape = RoundedCornerShape(12.dp),
+                                        colors = ButtonDefaults.buttonColors(containerColor = if (alreadyIn) InkBlack else TealPrimary),
+                                        modifier = Modifier.height(36.dp)
                                     ) {
                                         Text(if (alreadyIn) "+ Add" else "Quick Add", fontSize = 11.sp, fontWeight = FontWeight.Bold)
                                     }
@@ -783,24 +874,22 @@ fun PreplannedAndCustomAddDialog(
                     }
                 }
             } else {
-                // Scrollable Picker-Driven Custom Item Form
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .heightIn(max = 420.dp)
+                        .heightIn(max = 460.dp)
                         .verticalScroll(rememberScrollState()),
-                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
                     OutlinedTextField(
                         value = name,
                         onValueChange = { name = it },
                         label = { Text("Item Name *") },
                         singleLine = true,
-                        shape = RoundedCornerShape(10.dp),
+                        shape = RoundedCornerShape(14.dp),
                         modifier = Modifier.fillMaxWidth()
                     )
 
-                    // Category Chip Picker + Create New
                     Text("Category", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = MidnightSlate)
                     LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                         items(availableCategories) { cat ->
@@ -809,10 +898,7 @@ fun PreplannedAndCustomAddDialog(
                                 selected = isSel,
                                 onClick = { category = cat },
                                 label = { Text("${PreplannedCatalog.iconForCategory(cat)} $cat", fontSize = 11.sp) },
-                                colors = FilterChipDefaults.filterChipColors(
-                                    selectedContainerColor = TealPrimary,
-                                    selectedLabelColor = Color.White
-                                )
+                                colors = FilterChipDefaults.filterChipColors(selectedContainerColor = OrangeAccent, selectedLabelColor = Color.White)
                             )
                         }
                         item {
@@ -825,8 +911,7 @@ fun PreplannedAndCustomAddDialog(
                         }
                     }
 
-                    // Location Chip Picker + Create New
-                    Text("Storage Location", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = MidnightSlate)
+                    Text("Storage Spot", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = MidnightSlate)
                     LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                         items(availableLocations) { loc ->
                             val isSel = location.equals(loc, ignoreCase = true)
@@ -834,23 +919,19 @@ fun PreplannedAndCustomAddDialog(
                                 selected = isSel,
                                 onClick = { location = loc },
                                 label = { Text("📍 $loc", fontSize = 11.sp) },
-                                colors = FilterChipDefaults.filterChipColors(
-                                    selectedContainerColor = DarkSlate,
-                                    selectedLabelColor = Color.White
-                                )
+                                colors = FilterChipDefaults.filterChipColors(selectedContainerColor = InkBlack, selectedLabelColor = Color.White)
                             )
                         }
                         item {
                             FilterChip(
                                 selected = false,
                                 onClick = { showNewLocDialog = true },
-                                label = { Text("+ Location", fontSize = 11.sp, fontWeight = FontWeight.Bold) },
-                                colors = FilterChipDefaults.filterChipColors(containerColor = Color(0xFFF1F5F9))
+                                label = { Text("+ Spot", fontSize = 11.sp, fontWeight = FontWeight.Bold) },
+                                colors = FilterChipDefaults.filterChipColors(containerColor = SoftTileSurface)
                             )
                         }
                     }
 
-                    // Unit Chip Picker
                     Text("Unit / Pack Size", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = MidnightSlate)
                     LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                         items(PreplannedCatalog.standardUnits) { u ->
@@ -859,10 +940,7 @@ fun PreplannedAndCustomAddDialog(
                                 selected = isSel,
                                 onClick = { unit = u },
                                 label = { Text(u, fontSize = 11.sp) },
-                                colors = FilterChipDefaults.filterChipColors(
-                                    selectedContainerColor = TealPrimary,
-                                    selectedLabelColor = Color.White
-                                )
+                                colors = FilterChipDefaults.filterChipColors(selectedContainerColor = TealPrimary, selectedLabelColor = Color.White)
                             )
                         }
                     }
@@ -874,7 +952,7 @@ fun PreplannedAndCustomAddDialog(
                             label = { Text("Initial Qty") },
                             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                             singleLine = true,
-                            shape = RoundedCornerShape(10.dp),
+                            shape = RoundedCornerShape(12.dp),
                             modifier = Modifier.weight(1f)
                         )
                         OutlinedTextField(
@@ -883,114 +961,76 @@ fun PreplannedAndCustomAddDialog(
                             label = { Text("Par Goal") },
                             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                             singleLine = true,
-                            shape = RoundedCornerShape(10.dp),
+                            shape = RoundedCornerShape(12.dp),
                             modifier = Modifier.weight(1f)
-                        )
-                    }
-
-                    // Quick Expiry Chips + Date Input
-                    Text("Expiration Date", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = MidnightSlate)
-                    LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        val presets = listOf(
-                            "+3 mo" to 3L,
-                            "+6 mo" to 6L,
-                            "+1 yr" to 12L,
-                            "+2 yrs" to 24L
-                        )
-                        items(presets) { (label, mos) ->
-                            FilterChip(
-                                selected = false,
-                                onClick = {
-                                    earliestExpiry = LocalDate.now().plusMonths(mos).format(DateTimeFormatter.ISO_LOCAL_DATE)
-                                },
-                                label = { Text(label, fontSize = 11.sp) }
-                            )
-                        }
-                        item {
-                            FilterChip(
-                                selected = earliestExpiry.isEmpty(),
-                                onClick = { earliestExpiry = "" },
-                                label = { Text("No Expiry", fontSize = 11.sp) }
-                            )
-                        }
-                    }
-
-                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        OutlinedTextField(
-                            value = earliestExpiry,
-                            onValueChange = { earliestExpiry = it },
-                            label = { Text("YYYY-MM-DD") },
-                            singleLine = true,
-                            shape = RoundedCornerShape(10.dp),
-                            modifier = Modifier.weight(1.3f)
                         )
                         OutlinedTextField(
                             value = servingsStr,
                             onValueChange = { servingsStr = it },
-                            label = { Text("Servings/Unit") },
+                            label = { Text("Serv/Unit") },
                             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                             singleLine = true,
-                            shape = RoundedCornerShape(10.dp),
-                            modifier = Modifier.weight(1f)
+                            shape = RoundedCornerShape(12.dp),
+                            modifier = Modifier.weight(0.9f)
                         )
                     }
+
+                    // Scrollable Wheel Date Picker!
+                    Text("Expiration Date (Scrollable)", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = MidnightSlate)
+                    ScrollableWheelDatePicker(
+                        initialDate = earliestExpiry,
+                        onDateSelected = { earliestExpiry = it }
+                    )
 
                     OutlinedTextField(
                         value = notes,
                         onValueChange = { notes = it },
                         label = { Text("Notes (optional)") },
                         singleLine = true,
-                        shape = RoundedCornerShape(10.dp),
+                        shape = RoundedCornerShape(12.dp),
                         modifier = Modifier.fillMaxWidth()
                     )
+
+                    Button(
+                        onClick = {
+                            if (name.isNotBlank()) {
+                                val initQty = initialQtyStr.toDoubleOrNull() ?: 0.0
+                                val par = parLevelStr.toDoubleOrNull() ?: 0.0
+                                val serv = servingsStr.toDoubleOrNull() ?: 1.0
+                                val newItem = InventoryItem(
+                                    id = "RATION-" + UUID.randomUUID().toString().take(6).uppercase(),
+                                    name = name.trim(),
+                                    category = category.trim(),
+                                    unit = unit.trim(),
+                                    location = location.trim(),
+                                    initialQty = initQty,
+                                    stockIn = 0.0,
+                                    stockOut = 0.0,
+                                    currentQty = initQty,
+                                    parLevel = par,
+                                    restockNeeded = maxOf(0.0, par - initQty),
+                                    earliestExpiry = earliestExpiry.trim().ifEmpty { null },
+                                    expirationStatus = if (earliestExpiry.isBlank()) "UNKNOWN" else "GOOD",
+                                    stockStatus = if (initQty < par) "LOW" else "OK",
+                                    servingsPerUnit = serv,
+                                    totalServings = initQty * serv,
+                                    notes = notes.trim(),
+                                    syncPending = true
+                                )
+                                onConfirm(newItem)
+                            }
+                        },
+                        enabled = name.isNotBlank(),
+                        colors = ButtonDefaults.buttonColors(containerColor = InkBlack),
+                        shape = RoundedCornerShape(14.dp),
+                        modifier = Modifier.fillMaxWidth().height(48.dp)
+                    ) {
+                        Text("Save Ration to Pantry & Sync", fontWeight = FontWeight.Bold)
+                    }
                 }
-            }
-        },
-        confirmButton = {
-            if (selectedTab == 1) {
-                Button(
-                    onClick = {
-                        if (name.isNotBlank()) {
-                            val initQty = initialQtyStr.toDoubleOrNull() ?: 0.0
-                            val par = parLevelStr.toDoubleOrNull() ?: 0.0
-                            val serv = servingsStr.toDoubleOrNull() ?: 1.0
-                            val item = InventoryItem(
-                                id = "RATION-" + UUID.randomUUID().toString().take(6).uppercase(),
-                                name = name.trim(),
-                                category = category.trim(),
-                                unit = unit.trim(),
-                                location = location.trim(),
-                                initialQty = initQty,
-                                stockIn = 0.0,
-                                stockOut = 0.0,
-                                currentQty = initQty,
-                                parLevel = par,
-                                restockNeeded = maxOf(0.0, par - initQty),
-                                earliestExpiry = earliestExpiry.trim().ifEmpty { null },
-                                expirationStatus = if (earliestExpiry.isBlank()) "UNKNOWN" else "GOOD",
-                                stockStatus = if (initQty < par) "LOW" else "OK",
-                                servingsPerUnit = serv,
-                                totalServings = initQty * serv,
-                                notes = notes.trim(),
-                                syncPending = true
-                            )
-                            onConfirm(item)
-                        }
-                    },
-                    colors = ButtonDefaults.buttonColors(containerColor = TealPrimary),
-                    shape = RoundedCornerShape(10.dp),
-                    enabled = name.isNotBlank()
-                ) {
-                    Text("Save Ration", fontWeight = FontWeight.Bold)
-                }
-            }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) {
-                Text("Close", color = MediumSlate)
             }
         }
-    )
+    }
 
     if (showNewCatDialog) {
         QuickNameDialog(
@@ -1007,7 +1047,7 @@ fun PreplannedAndCustomAddDialog(
 
     if (showNewLocDialog) {
         QuickNameDialog(
-            title = "New Storage Location",
+            title = "New Storage Spot",
             placeholder = "e.g. Garage Shelf B",
             onDismiss = { showNewLocDialog = false },
             onConfirm = {
@@ -1019,8 +1059,9 @@ fun PreplannedAndCustomAddDialog(
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun InventoryItemEditorDialog(
+fun InventoryItemEditorSheet(
     item: InventoryItem,
     availableCategories: List<String>,
     availableLocations: List<String>,
@@ -1032,6 +1073,7 @@ fun InventoryItemEditorDialog(
     onAddToGroceries: () -> Unit,
     onDelete: () -> Unit
 ) {
+    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     var name by remember { mutableStateOf(item.name) }
     var category by remember { mutableStateOf(item.category) }
     var unit by remember { mutableStateOf(item.unit.ifBlank { "lbs" }) }
@@ -1046,205 +1088,208 @@ fun InventoryItemEditorDialog(
     var showNewCatDialog by remember { mutableStateOf(false) }
     var showNewLocDialog by remember { mutableStateOf(false) }
 
-    AlertDialog(
+    ModalBottomSheet(
         onDismissRequest = onDismiss,
-        shape = RoundedCornerShape(18.dp),
-        containerColor = Color.White,
-        title = {
+        sheetState = sheetState,
+        containerColor = CardSurface,
+        shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp)
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .navigationBarsPadding()
+                .padding(horizontal = 20.dp)
+                .padding(bottom = 24.dp)
+                .verticalScroll(rememberScrollState()),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Text("Edit Ration Settings", fontWeight = FontWeight.Bold, fontSize = 17.sp, color = MidnightSlate)
-                IconButton(onClick = { confirmDelete = true }, modifier = Modifier.size(32.dp)) {
-                    Icon(Icons.Default.Delete, contentDescription = "Delete", tint = DangerRed, modifier = Modifier.size(20.dp))
-                }
-            }
-        },
-        text = {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .heightIn(max = 440.dp)
-                    .verticalScroll(rememberScrollState()),
-                verticalArrangement = Arrangement.spacedBy(10.dp)
-            ) {
-                if (confirmDelete) {
-                    Surface(
-                        shape = RoundedCornerShape(10.dp),
-                        color = DangerSoft,
-                        border = BorderStroke(1.dp, DangerRed.copy(alpha = 0.3f)),
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Column(modifier = Modifier.padding(12.dp)) {
-                            Text("Delete '${item.name}' from Google Sheet & Phone?", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = DangerRed)
-                            Spacer(modifier = Modifier.height(8.dp))
-                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                Button(onClick = onDelete, colors = ButtonDefaults.buttonColors(containerColor = DangerRed)) {
-                                    Text("Confirm Delete")
-                                }
-                                TextButton(onClick = { confirmDelete = false }) {
-                                    Text("Cancel", color = DarkSlate)
-                                }
-                            }
-                        }
-                    }
-                }
-
-                // Quick Bulk Stepper Row
+                Text("Edit Ration Settings", fontWeight = FontWeight.ExtraBold, fontSize = 20.sp, color = MidnightSlate)
                 Surface(
-                    shape = RoundedCornerShape(12.dp),
-                    color = Color(0xFFF8FAFC),
-                    border = BorderStroke(1.dp, BorderSlate),
+                    shape = CircleShape,
+                    color = DangerSoft,
+                    modifier = Modifier.size(36.dp).clickable { confirmDelete = !confirmDelete }
+                ) {
+                    Box(contentAlignment = Alignment.Center) {
+                        Icon(Icons.Default.Delete, contentDescription = "Delete", tint = DangerRed, modifier = Modifier.size(18.dp))
+                    }
+                }
+            }
+
+            if (confirmDelete) {
+                Surface(
+                    shape = RoundedCornerShape(14.dp),
+                    color = DangerSoft,
+                    border = BorderStroke(1.dp, DangerRed.copy(alpha = 0.3f)),
                     modifier = Modifier.fillMaxWidth()
                 ) {
-                    Column(modifier = Modifier.padding(10.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                        Text("Quick Stock Adjust", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = MediumSlate)
-                        Spacer(modifier = Modifier.height(6.dp))
-                        Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
-                            OutlinedButton(onClick = { onQuickStep(-5.0) }, modifier = Modifier.height(34.dp)) {
-                                Text("-5", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                    Column(modifier = Modifier.padding(14.dp)) {
+                        Text("Remove '${item.name}' permanently?", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = DangerRed)
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Button(onClick = onDelete, colors = ButtonDefaults.buttonColors(containerColor = DangerRed)) {
+                                Text("Confirm Delete")
                             }
-                            OutlinedButton(onClick = { onQuickStep(-1.0) }, modifier = Modifier.height(34.dp)) {
-                                Text("-1", fontSize = 12.sp, fontWeight = FontWeight.Bold)
-                            }
-                            Button(onClick = { onQuickStep(1.0) }, colors = ButtonDefaults.buttonColors(containerColor = TealPrimary), modifier = Modifier.height(34.dp)) {
-                                Text("+1", fontSize = 12.sp, fontWeight = FontWeight.Bold)
-                            }
-                            Button(onClick = { onQuickStep(5.0) }, colors = ButtonDefaults.buttonColors(containerColor = TealPrimary), modifier = Modifier.height(34.dp)) {
-                                Text("+5", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                            TextButton(onClick = { confirmDelete = false }) {
+                                Text("Cancel", color = DarkSlate)
                             }
                         }
                     }
                 }
+            }
 
-                OutlinedTextField(
-                    value = name,
-                    onValueChange = { name = it },
-                    label = { Text("Item Name") },
-                    singleLine = true,
-                    shape = RoundedCornerShape(10.dp),
-                    modifier = Modifier.fillMaxWidth()
-                )
-
-                Text("Category", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = MidnightSlate)
-                LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    items(availableCategories) { cat ->
-                        val isSel = category.equals(cat, ignoreCase = true)
-                        FilterChip(
-                            selected = isSel,
-                            onClick = { category = cat },
-                            label = { Text("${PreplannedCatalog.iconForCategory(cat)} $cat", fontSize = 11.sp) },
-                            colors = FilterChipDefaults.filterChipColors(selectedContainerColor = TealPrimary, selectedLabelColor = Color.White)
-                        )
+            // Quick Stock Adjust Bar
+            Surface(
+                shape = RoundedCornerShape(16.dp),
+                color = SoftTileSurface,
+                border = BorderStroke(1.dp, BorderSlate),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(modifier = Modifier.padding(12.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                    Text("Quick Adjust (${item.unit})", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = MediumSlate)
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                        OutlinedButton(onClick = { onQuickStep(-5.0) }, shape = RoundedCornerShape(10.dp), modifier = Modifier.height(36.dp)) {
+                            Text("-5", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = DarkSlate)
+                        }
+                        OutlinedButton(onClick = { onQuickStep(-1.0) }, shape = RoundedCornerShape(10.dp), modifier = Modifier.height(36.dp)) {
+                            Text("-1", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = DarkSlate)
+                        }
+                        Button(onClick = { onQuickStep(1.0) }, shape = RoundedCornerShape(10.dp), colors = ButtonDefaults.buttonColors(containerColor = TealPrimary), modifier = Modifier.height(36.dp)) {
+                            Text("+1", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                        }
+                        Button(onClick = { onQuickStep(5.0) }, shape = RoundedCornerShape(10.dp), colors = ButtonDefaults.buttonColors(containerColor = TealPrimary), modifier = Modifier.height(36.dp)) {
+                            Text("+5", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                        }
                     }
-                    item {
-                        FilterChip(
-                            selected = false,
-                            onClick = { showNewCatDialog = true },
-                            label = { Text("+ New", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = TealPrimary) },
-                            colors = FilterChipDefaults.filterChipColors(containerColor = TealSoft)
-                        )
-                    }
-                }
-
-                Text("Storage Location", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = MidnightSlate)
-                LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    items(availableLocations) { loc ->
-                        val isSel = location.equals(loc, ignoreCase = true)
-                        FilterChip(
-                            selected = isSel,
-                            onClick = { location = loc },
-                            label = { Text("📍 $loc", fontSize = 11.sp) },
-                            colors = FilterChipDefaults.filterChipColors(selectedContainerColor = DarkSlate, selectedLabelColor = Color.White)
-                        )
-                    }
-                    item {
-                        FilterChip(
-                            selected = false,
-                            onClick = { showNewLocDialog = true },
-                            label = { Text("+ New", fontSize = 11.sp, fontWeight = FontWeight.Bold) },
-                            colors = FilterChipDefaults.filterChipColors(containerColor = Color(0xFFF1F5F9))
-                        )
-                    }
-                }
-
-                Text("Unit", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = MidnightSlate)
-                LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    items(PreplannedCatalog.standardUnits) { u ->
-                        val isSel = unit.equals(u, ignoreCase = true)
-                        FilterChip(
-                            selected = isSel,
-                            onClick = { unit = u },
-                            label = { Text(u, fontSize = 11.sp) },
-                            colors = FilterChipDefaults.filterChipColors(selectedContainerColor = TealPrimary, selectedLabelColor = Color.White)
-                        )
-                    }
-                }
-
-                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    OutlinedTextField(
-                        value = currentQtyStr,
-                        onValueChange = { currentQtyStr = it },
-                        label = { Text("Current Qty") },
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                        singleLine = true,
-                        shape = RoundedCornerShape(10.dp),
-                        modifier = Modifier.weight(1f)
-                    )
-                    OutlinedTextField(
-                        value = parLevelStr,
-                        onValueChange = { parLevelStr = it },
-                        label = { Text("Par Goal") },
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                        singleLine = true,
-                        shape = RoundedCornerShape(10.dp),
-                        modifier = Modifier.weight(1f)
-                    )
-                }
-
-                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    OutlinedTextField(
-                        value = earliestExpiry,
-                        onValueChange = { earliestExpiry = it },
-                        label = { Text("Expiry (YYYY-MM-DD)") },
-                        singleLine = true,
-                        shape = RoundedCornerShape(10.dp),
-                        modifier = Modifier.weight(1.3f)
-                    )
-                    OutlinedTextField(
-                        value = servingsStr,
-                        onValueChange = { servingsStr = it },
-                        label = { Text("Servings/Unit") },
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                        singleLine = true,
-                        shape = RoundedCornerShape(10.dp),
-                        modifier = Modifier.weight(1f)
-                    )
-                }
-
-                OutlinedTextField(
-                    value = notes,
-                    onValueChange = { notes = it },
-                    label = { Text("Notes") },
-                    singleLine = true,
-                    shape = RoundedCornerShape(10.dp),
-                    modifier = Modifier.fillMaxWidth()
-                )
-
-                OutlinedButton(
-                    onClick = onAddToGroceries,
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(10.dp)
-                ) {
-                    Icon(Icons.Default.AddShoppingCart, contentDescription = null, modifier = Modifier.size(16.dp), tint = TealPrimary)
-                    Spacer(modifier = Modifier.width(6.dp))
-                    Text("Add Deficit to Groceries List", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = TealPrimary)
                 }
             }
-        },
-        confirmButton = {
+
+            OutlinedTextField(
+                value = name,
+                onValueChange = { name = it },
+                label = { Text("Item Name") },
+                singleLine = true,
+                shape = RoundedCornerShape(14.dp),
+                modifier = Modifier.fillMaxWidth()
+            )
+
+            Text("Category", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = MidnightSlate)
+            LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                items(availableCategories) { cat ->
+                    val isSel = category.equals(cat, ignoreCase = true)
+                    FilterChip(
+                        selected = isSel,
+                        onClick = { category = cat },
+                        label = { Text("${PreplannedCatalog.iconForCategory(cat)} $cat", fontSize = 11.sp) },
+                        colors = FilterChipDefaults.filterChipColors(selectedContainerColor = OrangeAccent, selectedLabelColor = Color.White)
+                    )
+                }
+                item {
+                    FilterChip(
+                        selected = false,
+                        onClick = { showNewCatDialog = true },
+                        label = { Text("+ New", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = TealPrimary) },
+                        colors = FilterChipDefaults.filterChipColors(containerColor = TealSoft)
+                    )
+                }
+            }
+
+            Text("Storage Spot", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = MidnightSlate)
+            LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                items(availableLocations) { loc ->
+                    val isSel = location.equals(loc, ignoreCase = true)
+                    FilterChip(
+                        selected = isSel,
+                        onClick = { location = loc },
+                        label = { Text("📍 $loc", fontSize = 11.sp) },
+                        colors = FilterChipDefaults.filterChipColors(selectedContainerColor = InkBlack, selectedLabelColor = Color.White)
+                    )
+                }
+                item {
+                    FilterChip(
+                        selected = false,
+                        onClick = { showNewLocDialog = true },
+                        label = { Text("+ New", fontSize = 11.sp, fontWeight = FontWeight.Bold) },
+                        colors = FilterChipDefaults.filterChipColors(containerColor = SoftTileSurface)
+                    )
+                }
+            }
+
+            Text("Unit", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = MidnightSlate)
+            LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                items(PreplannedCatalog.standardUnits) { u ->
+                    val isSel = unit.equals(u, ignoreCase = true)
+                    FilterChip(
+                        selected = isSel,
+                        onClick = { unit = u },
+                        label = { Text(u, fontSize = 11.sp) },
+                        colors = FilterChipDefaults.filterChipColors(selectedContainerColor = TealPrimary, selectedLabelColor = Color.White)
+                    )
+                }
+            }
+
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedTextField(
+                    value = currentQtyStr,
+                    onValueChange = { currentQtyStr = it },
+                    label = { Text("Current Qty") },
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                    singleLine = true,
+                    shape = RoundedCornerShape(12.dp),
+                    modifier = Modifier.weight(1f)
+                )
+                OutlinedTextField(
+                    value = parLevelStr,
+                    onValueChange = { parLevelStr = it },
+                    label = { Text("Par Goal") },
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                    singleLine = true,
+                    shape = RoundedCornerShape(12.dp),
+                    modifier = Modifier.weight(1f)
+                )
+                OutlinedTextField(
+                    value = servingsStr,
+                    onValueChange = { servingsStr = it },
+                    label = { Text("Serv/Unit") },
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                    singleLine = true,
+                    shape = RoundedCornerShape(12.dp),
+                    modifier = Modifier.weight(0.9f)
+                )
+            }
+
+            // Scrollable Drum Wheel Date Picker
+            Text("Expiration Date (Scrollable)", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = MidnightSlate)
+            ScrollableWheelDatePicker(
+                initialDate = earliestExpiry,
+                onDateSelected = { earliestExpiry = it }
+            )
+
+            OutlinedTextField(
+                value = notes,
+                onValueChange = { notes = it },
+                label = { Text("Notes") },
+                singleLine = true,
+                shape = RoundedCornerShape(12.dp),
+                modifier = Modifier.fillMaxWidth()
+            )
+
+            OutlinedButton(
+                onClick = onAddToGroceries,
+                modifier = Modifier.fillMaxWidth().height(42.dp),
+                shape = RoundedCornerShape(12.dp),
+                border = BorderStroke(1.dp, TealPrimary.copy(alpha = 0.4f))
+            ) {
+                Icon(Icons.Default.AddShoppingCart, contentDescription = null, modifier = Modifier.size(16.dp), tint = TealPrimary)
+                Spacer(modifier = Modifier.width(6.dp))
+                Text("Add Deficit to Shopping List", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = TealPrimary)
+            }
+
             Button(
                 onClick = {
                     val newQty = currentQtyStr.toDoubleOrNull() ?: item.currentQty
@@ -1273,18 +1318,14 @@ fun InventoryItemEditorDialog(
                         )
                     )
                 },
-                colors = ButtonDefaults.buttonColors(containerColor = TealPrimary),
-                shape = RoundedCornerShape(10.dp)
+                colors = ButtonDefaults.buttonColors(containerColor = InkBlack),
+                shape = RoundedCornerShape(14.dp),
+                modifier = Modifier.fillMaxWidth().height(48.dp)
             ) {
-                Text("Save Changes", fontWeight = FontWeight.Bold)
-            }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) {
-                Text("Cancel", color = MediumSlate)
+                Text("Save Changes & Sync", fontWeight = FontWeight.Bold)
             }
         }
-    )
+    }
 
     if (showNewCatDialog) {
         QuickNameDialog(
@@ -1301,7 +1342,7 @@ fun InventoryItemEditorDialog(
 
     if (showNewLocDialog) {
         QuickNameDialog(
-            title = "New Storage Location",
+            title = "New Storage Spot",
             placeholder = "e.g. Garage Freezer",
             onDismiss = { showNewLocDialog = false },
             onConfirm = {
@@ -1323,24 +1364,25 @@ fun QuickNameDialog(
     var value by remember { mutableStateOf("") }
     AlertDialog(
         onDismissRequest = onDismiss,
-        shape = RoundedCornerShape(14.dp),
+        shape = RoundedCornerShape(18.dp),
         containerColor = Color.White,
-        title = { Text(title, fontSize = 16.sp, fontWeight = FontWeight.Bold, color = MidnightSlate) },
+        title = { Text(title, fontSize = 17.sp, fontWeight = FontWeight.Bold, color = MidnightSlate) },
         text = {
             OutlinedTextField(
                 value = value,
                 onValueChange = { value = it },
                 placeholder = { Text(placeholder) },
                 singleLine = true,
-                shape = RoundedCornerShape(10.dp),
+                shape = RoundedCornerShape(12.dp),
                 modifier = Modifier.fillMaxWidth()
             )
         },
         confirmButton = {
             Button(
                 onClick = { if (value.isNotBlank()) onConfirm(value.trim()) },
-                colors = ButtonDefaults.buttonColors(containerColor = TealPrimary),
-                enabled = value.isNotBlank()
+                colors = ButtonDefaults.buttonColors(containerColor = InkBlack),
+                enabled = value.isNotBlank(),
+                shape = RoundedCornerShape(10.dp)
             ) {
                 Text("Create")
             }

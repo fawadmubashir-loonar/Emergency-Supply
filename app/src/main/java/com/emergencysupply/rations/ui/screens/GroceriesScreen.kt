@@ -34,8 +34,6 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CheckboxDefaults
-import androidx.compose.material3.FilterChip
-import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.OutlinedButton
@@ -66,10 +64,13 @@ import com.emergencysupply.rations.ui.theme.CardSurface
 import com.emergencysupply.rations.ui.theme.DangerRed
 import com.emergencysupply.rations.ui.theme.DangerSoft
 import com.emergencysupply.rations.ui.theme.DarkSlate
+import com.emergencysupply.rations.ui.theme.InkBlack
 import com.emergencysupply.rations.ui.theme.LightSlate
 import com.emergencysupply.rations.ui.theme.MediumSlate
 import com.emergencysupply.rations.ui.theme.MidnightSlate
 import com.emergencysupply.rations.ui.theme.MutedSlate
+import com.emergencysupply.rations.ui.theme.OrangeAccent
+import com.emergencysupply.rations.ui.theme.SoftTileSurface
 import com.emergencysupply.rations.ui.theme.TealPrimary
 import com.emergencysupply.rations.ui.theme.TealSoft
 import com.emergencysupply.rations.ui.theme.WarningAmber
@@ -104,34 +105,31 @@ fun GroceriesScreen(viewModel: MainViewModel) {
     LazyColumn(
         modifier = Modifier
             .fillMaxSize()
-            .padding(horizontal = 16.dp, vertical = 8.dp),
+            .padding(horizontal = 16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        // 1. Quick Add Section with One-Tap Pantry/Staple Chips
+        // 1. Quick Add Section
         item {
             Card(
                 modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(16.dp),
+                shape = RoundedCornerShape(22.dp),
                 colors = CardDefaults.cardColors(containerColor = CardSurface),
-                border = BorderStroke(1.dp, BorderSlate),
-                elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
+                elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
             ) {
-                Column(modifier = Modifier.padding(14.dp)) {
+                Column(modifier = Modifier.padding(16.dp)) {
                     Text(
-                        text = "Quick Add to Shopping List",
-                        fontSize = 14.sp,
+                        text = "One-Tap Add",
+                        fontSize = 15.sp,
                         fontWeight = FontWeight.Bold,
                         color = MidnightSlate
                     )
-                    Spacer(modifier = Modifier.height(6.dp))
+                    Spacer(modifier = Modifier.height(8.dp))
 
-                    // Scrollable One-Tap Quick-Pick Chips (no typing required!)
                     LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                         items(quickPickItems) { pick ->
                             Surface(
                                 shape = RoundedCornerShape(16.dp),
                                 color = TealSoft,
-                                border = BorderStroke(1.dp, TealPrimary.copy(alpha = 0.3f)),
                                 modifier = Modifier.clickable {
                                     val targetStore = if (selectedStore != "All Stores") selectedStore else newStore
                                     val matchInv = allInventory.firstOrNull { it.name.equals(pick, ignoreCase = true) }
@@ -150,13 +148,13 @@ fun GroceriesScreen(viewModel: MainViewModel) {
                                     fontSize = 11.sp,
                                     fontWeight = FontWeight.Bold,
                                     color = TealPrimary,
-                                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp)
+                                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
                                 )
                             }
                         }
                     }
 
-                    Spacer(modifier = Modifier.height(10.dp))
+                    Spacer(modifier = Modifier.height(12.dp))
 
                     Row(
                         modifier = Modifier.fillMaxWidth(),
@@ -166,15 +164,15 @@ fun GroceriesScreen(viewModel: MainViewModel) {
                         OutlinedTextField(
                             value = newName,
                             onValueChange = { newName = it },
-                            placeholder = { Text("Or type custom item...", fontSize = 13.sp, color = LightSlate) },
+                            placeholder = { Text("Or type item name...", fontSize = 13.sp, color = LightSlate) },
                             singleLine = true,
                             modifier = Modifier.weight(1.8f),
-                            shape = RoundedCornerShape(12.dp),
+                            shape = RoundedCornerShape(14.dp),
                             colors = OutlinedTextFieldDefaults.colors(
                                 focusedBorderColor = TealPrimary,
                                 unfocusedBorderColor = BorderSlate,
-                                focusedContainerColor = Color(0xFFF8FAFC),
-                                unfocusedContainerColor = Color(0xFFF8FAFC)
+                                focusedContainerColor = SoftTileSurface,
+                                unfocusedContainerColor = SoftTileSurface
                             )
                         )
 
@@ -184,13 +182,13 @@ fun GroceriesScreen(viewModel: MainViewModel) {
                             placeholder = { Text("Qty", fontSize = 13.sp) },
                             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                             singleLine = true,
-                            modifier = Modifier.weight(0.7f),
-                            shape = RoundedCornerShape(12.dp),
+                            modifier = Modifier.weight(0.65f),
+                            shape = RoundedCornerShape(14.dp),
                             colors = OutlinedTextFieldDefaults.colors(
                                 focusedBorderColor = TealPrimary,
                                 unfocusedBorderColor = BorderSlate,
-                                focusedContainerColor = Color(0xFFF8FAFC),
-                                unfocusedContainerColor = Color(0xFFF8FAFC)
+                                focusedContainerColor = SoftTileSurface,
+                                unfocusedContainerColor = SoftTileSurface
                             )
                         )
 
@@ -210,8 +208,8 @@ fun GroceriesScreen(viewModel: MainViewModel) {
                                 }
                             },
                             modifier = Modifier.height(52.dp),
-                            shape = RoundedCornerShape(12.dp),
-                            colors = ButtonDefaults.buttonColors(containerColor = TealPrimary),
+                            shape = RoundedCornerShape(14.dp),
+                            colors = ButtonDefaults.buttonColors(containerColor = InkBlack),
                             enabled = newName.isNotBlank()
                         ) {
                             Icon(imageVector = Icons.Default.Add, contentDescription = "Add", modifier = Modifier.size(20.dp))
@@ -220,27 +218,25 @@ fun GroceriesScreen(viewModel: MainViewModel) {
 
                     Spacer(modifier = Modifier.height(10.dp))
 
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(6.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text(text = "Store:", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = MediumSlate)
+                    LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
+                        item {
+                            Text(text = "Store:", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = MediumSlate)
+                        }
                         val storeQuickList = listOf("Grocery Store", "Costco", "Halal Market", "Target")
-                        storeQuickList.forEach { s ->
+                        items(storeQuickList) { s ->
                             val isSel = (if (selectedStore != "All Stores") selectedStore else newStore).equals(s, ignoreCase = true)
                             Surface(
-                                shape = RoundedCornerShape(8.dp),
-                                color = if (isSel) TealSoft else Color(0xFFF1F5F9),
-                                border = BorderStroke(1.dp, if (isSel) TealPrimary else BorderSlate),
+                                shape = RoundedCornerShape(10.dp),
+                                color = if (isSel) InkBlack else SoftTileSurface,
+                                border = BorderStroke(1.dp, if (isSel) InkBlack else BorderSlate),
                                 modifier = Modifier.clickable { newStore = s }
                             ) {
                                 Text(
                                     text = s,
                                     fontSize = 10.sp,
-                                    fontWeight = if (isSel) FontWeight.Bold else FontWeight.Medium,
-                                    color = if (isSel) TealPrimary else DarkSlate,
-                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                                    fontWeight = FontWeight.Bold,
+                                    color = if (isSel) Color.White else DarkSlate,
+                                    modifier = Modifier.padding(horizontal = 9.dp, vertical = 5.dp)
                                 )
                             }
                         }
@@ -249,7 +245,7 @@ fun GroceriesScreen(viewModel: MainViewModel) {
             }
         }
 
-        // 2. Store Filter Chips
+        // 2. Store Filter Pills
         item {
             LazyRow(
                 modifier = Modifier.fillMaxWidth(),
@@ -258,25 +254,20 @@ fun GroceriesScreen(viewModel: MainViewModel) {
                 items(storeOptions) { store ->
                     val isSelected = selectedStore.equals(store, ignoreCase = true)
                     val storeItemCount = if (store == "All Stores") groceries.size else groceries.count { it.store.equals(store, ignoreCase = true) }
-                    FilterChip(
-                        selected = isSelected,
-                        onClick = { viewModel.groceryStoreFilter.value = store },
-                        label = {
-                            Text(
-                                text = if (storeItemCount > 0) "$store ($storeItemCount)" else store,
-                                fontSize = 12.sp,
-                                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium
-                            )
-                        },
+                    Surface(
                         shape = RoundedCornerShape(20.dp),
-                        colors = FilterChipDefaults.filterChipColors(
-                            selectedContainerColor = DarkSlate,
-                            selectedLabelColor = Color.White,
-                            containerColor = CardSurface,
-                            labelColor = DarkSlate
-                        ),
-                        border = BorderStroke(1.dp, if (isSelected) DarkSlate else BorderSlate)
-                    )
+                        color = if (isSelected) OrangeAccent else CardSurface,
+                        border = BorderStroke(1.dp, if (isSelected) OrangeAccent else BorderSlate),
+                        modifier = Modifier.clickable { viewModel.groceryStoreFilter.value = store }
+                    ) {
+                        Text(
+                            text = if (storeItemCount > 0) "$store ($storeItemCount)" else store,
+                            fontSize = 12.sp,
+                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+                            color = if (isSelected) Color.White else DarkSlate,
+                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 7.dp)
+                        )
+                    }
                 }
             }
         }
@@ -289,7 +280,7 @@ fun GroceriesScreen(viewModel: MainViewModel) {
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
-                    text = "$uncheckedCount remaining ($checkedCount checked)",
+                    text = "$uncheckedCount to buy ($checkedCount checked)",
                     fontSize = 13.sp,
                     fontWeight = FontWeight.Bold,
                     color = MidnightSlate
@@ -298,61 +289,41 @@ fun GroceriesScreen(viewModel: MainViewModel) {
                 if (checkedCount > 0) {
                     OutlinedButton(
                         onClick = { viewModel.clearCheckedGroceries() },
-                        shape = RoundedCornerShape(8.dp),
+                        shape = RoundedCornerShape(10.dp),
                         border = BorderStroke(1.dp, DangerRed.copy(alpha = 0.4f)),
                         colors = ButtonDefaults.outlinedButtonColors(containerColor = DangerSoft)
                     ) {
                         Icon(imageVector = Icons.Default.DeleteSweep, contentDescription = null, modifier = Modifier.size(16.dp), tint = DangerRed)
                         Spacer(modifier = Modifier.width(4.dp))
-                        Text(text = "Clear Checked ($checkedCount)", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = DangerRed)
+                        Text(text = "Clear ($checkedCount)", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = DangerRed)
                     }
                 }
             }
         }
 
-        // 4. Grouped Items Checklist
+        // 4. Checklist
         if (filteredGroceries.isEmpty()) {
             item {
-                Surface(
-                    shape = RoundedCornerShape(14.dp),
-                    color = CardSurface,
-                    border = BorderStroke(1.dp, BorderSlate),
-                    modifier = Modifier.fillMaxWidth()
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(20.dp),
+                    colors = CardDefaults.cardColors(containerColor = CardSurface),
+                    elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
                 ) {
                     Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(vertical = 36.dp, horizontal = 20.dp),
+                        modifier = Modifier.fillMaxWidth().padding(vertical = 36.dp, horizontal = 20.dp),
                         contentAlignment = Alignment.Center
                     ) {
                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                            Surface(
-                                shape = CircleShape,
-                                color = TealSoft,
-                                modifier = Modifier.size(52.dp)
-                            ) {
+                            Surface(shape = CircleShape, color = TealSoft, modifier = Modifier.size(54.dp)) {
                                 Box(contentAlignment = Alignment.Center) {
-                                    Icon(
-                                        imageVector = Icons.Default.ShoppingCart,
-                                        contentDescription = null,
-                                        modifier = Modifier.size(24.dp),
-                                        tint = TealPrimary
-                                    )
+                                    Icon(Icons.Default.ShoppingCart, contentDescription = null, modifier = Modifier.size(24.dp), tint = TealPrimary)
                                 }
                             }
                             Spacer(modifier = Modifier.height(10.dp))
-                            Text(
-                                text = "Shopping list is all clear! 🎉",
-                                fontSize = 15.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = MidnightSlate
-                            )
+                            Text("Shopping list clear! 🎉", fontSize = 15.sp, fontWeight = FontWeight.Bold, color = MidnightSlate)
                             Spacer(modifier = Modifier.height(4.dp))
-                            Text(
-                                text = "Tap any quick-pick chip above to add items instantly.",
-                                fontSize = 12.sp,
-                                color = MediumSlate
-                            )
+                            Text("Tap any quick-pick chip above to add items.", fontSize = 12.sp, color = MediumSlate)
                         }
                     }
                 }
@@ -363,27 +334,19 @@ fun GroceriesScreen(viewModel: MainViewModel) {
                 item {
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier.padding(top = 6.dp)
+                        modifier = Modifier.padding(top = 4.dp)
                     ) {
-                        Surface(
-                            shape = RoundedCornerShape(6.dp),
-                            color = TealSoft,
-                            border = BorderStroke(1.dp, TealPrimary.copy(alpha = 0.3f))
-                        ) {
+                        Surface(shape = RoundedCornerShape(8.dp), color = TealSoft) {
                             Text(
                                 text = "📍 $store",
                                 fontSize = 12.sp,
                                 fontWeight = FontWeight.Bold,
                                 color = TealPrimary,
-                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
                             )
                         }
                         Spacer(modifier = Modifier.width(8.dp))
-                        Text(
-                            text = "${itemsInStore.size} items",
-                            fontSize = 11.sp,
-                            color = LightSlate
-                        )
+                        Text(text = "${itemsInStore.size} items", fontSize = 11.sp, color = LightSlate)
                     }
                 }
 
@@ -402,7 +365,7 @@ fun GroceriesScreen(viewModel: MainViewModel) {
             }
         }
 
-        item { Spacer(modifier = Modifier.height(36.dp)) }
+        item { Spacer(modifier = Modifier.height(16.dp)) }
     }
 }
 
@@ -416,40 +379,28 @@ fun ReformedGroceryItemCard(
 ) {
     Card(
         modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(12.dp),
-        colors = CardDefaults.cardColors(
-            containerColor = if (item.checked) Color(0xFFF8FAFC) else CardSurface
-        ),
-        border = BorderStroke(1.dp, BorderSlate),
-        elevation = CardDefaults.cardElevation(defaultElevation = if (item.checked) 0.dp else 1.dp)
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(containerColor = if (item.checked) SoftTileSurface else CardSurface),
+        elevation = CardDefaults.cardElevation(defaultElevation = if (item.checked) 0.dp else 2.dp)
     ) {
         Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 12.dp, vertical = 10.dp),
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 12.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             Checkbox(
                 checked = item.checked,
                 onCheckedChange = { onToggleChecked() },
-                colors = CheckboxDefaults.colors(
-                    checkedColor = TealPrimary,
-                    uncheckedColor = MediumSlate
-                ),
+                colors = CheckboxDefaults.colors(checkedColor = TealPrimary, uncheckedColor = MediumSlate),
                 modifier = Modifier.size(24.dp)
             )
 
-            Spacer(modifier = Modifier.width(10.dp))
+            Spacer(modifier = Modifier.width(12.dp))
 
-            Column(
-                modifier = Modifier
-                    .weight(1f)
-                    .clickable { onToggleChecked() }
-            ) {
+            Column(modifier = Modifier.weight(1f).clickable { onToggleChecked() }) {
                 Text(
                     text = item.name,
                     fontSize = 15.sp,
-                    fontWeight = FontWeight.SemiBold,
+                    fontWeight = FontWeight.Bold,
                     color = if (item.checked) LightSlate else MidnightSlate,
                     textDecoration = if (item.checked) TextDecoration.LineThrough else TextDecoration.None
                 )
@@ -462,28 +413,17 @@ fun ReformedGroceryItemCard(
                         color = if (item.checked) MutedSlate else DarkSlate
                     )
                     if (item.aisle.isNotEmpty() && item.aisle != "General") {
-                        Text(
-                            text = " • ${item.aisle}",
-                            fontSize = 11.sp,
-                            color = TealPrimary
-                        )
+                        Text(text = " • ${item.aisle}", fontSize = 11.sp, color = TealPrimary)
                     }
                 }
             }
 
-            // 1-tap Move to Pantry Stock button
             Surface(
-                shape = RoundedCornerShape(8.dp),
+                shape = RoundedCornerShape(10.dp),
                 color = TealSoft,
-                border = BorderStroke(1.dp, TealPrimary.copy(alpha = 0.25f)),
-                modifier = Modifier
-                    .padding(end = 4.dp)
-                    .clickable(onClick = onMoveToPantry)
+                modifier = Modifier.padding(end = 4.dp).clickable(onClick = onMoveToPantry)
             ) {
-                Row(
-                    modifier = Modifier.padding(horizontal = 7.dp, vertical = 5.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
+                Row(modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
                     Icon(Icons.Default.Inventory, contentDescription = "Move to Pantry", tint = TealPrimary, modifier = Modifier.size(13.dp))
                     Spacer(modifier = Modifier.width(3.dp))
                     Text("+ Pantry", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = TealPrimary)
@@ -500,12 +440,7 @@ fun ReformedGroceryItemCard(
             }
 
             IconButton(onClick = onDelete, modifier = Modifier.size(30.dp)) {
-                Icon(
-                    imageVector = Icons.Default.Delete,
-                    contentDescription = "Delete",
-                    tint = LightSlate,
-                    modifier = Modifier.size(18.dp)
-                )
+                Icon(imageVector = Icons.Default.Delete, contentDescription = "Delete", tint = LightSlate, modifier = Modifier.size(18.dp))
             }
         }
     }

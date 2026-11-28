@@ -21,6 +21,7 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
@@ -31,13 +32,21 @@ enum class NavTab(val title: String) {
     SETTINGS("Settings")
 }
 
+data class GroupSummary(
+    val name: String,
+    val itemCount: Int,
+    val lowStockCount: Int,
+    val readinessPct: Int
+)
+
 data class DashboardMetrics(
     val totalUniqueItems: Int = 0,
     val totalUnitsInStock: Double = 0.0,
     val totalServings: Double = 0.0,
     val estDaysOfSupply: Int = 0,
     val expiringSoonCount: Int = 0,
-    val restockNeededCount: Int = 0
+    val restockNeededCount: Int = 0,
+    val parReadinessScore: Int = 0
 )
 
 class MainViewModel(
@@ -161,12 +170,18 @@ class MainViewModel(
         var servings = 0.0
         var expiringSoon = 0
         var restockNeeded = 0
+        var parCappedSum = 0.0
+        var parTotalSum = 0.0
 
         for (item in items) {
             units += item.currentQty
             servings += item.totalServings
             if (item.isExpiringSoon) expiringSoon++
             if (item.isLowStock) restockNeeded++
+            if (item.parLevel > 0) {
+                parCappedSum += minOf(item.currentQty, item.parLevel)
+                parTotalSum += item.parLevel
+            }
         }
 
         val household = currentSettings?.householdSize ?: 5
@@ -174,15 +189,52 @@ class MainViewModel(
             (servings / (household * 3.0)).toInt()
         } else 0
 
+        val parScore = if (parTotalSum > 0) {
+            ((parCappedSum / parTotalSum) * 100.0).toInt().coerceIn(0, 100)
+        } else if (unique > 0) 100 else 0
+
         DashboardMetrics(
             totalUniqueItems = unique,
             totalUnitsInStock = units,
             totalServings = servings,
             estDaysOfSupply = estDays,
             expiringSoonCount = expiringSoon,
-            restockNeededCount = restockNeeded
+            restockNeededCount = restockNeeded,
+            parReadinessScore = parScore
         )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), DashboardMetrics())
+
+    val categorySummaries: StateFlow<List<GroupSummary>> = allInventory.map { items ->
+        items.groupBy { it.category.trim().ifEmpty { "Uncategorized" } }
+            .map { (cat, list) ->
+                val parSum = list.sumOf { if (it.parLevel > 0) it.parLevel else 0.0 }
+                val stockCapped = list.sumOf { if (it.parLevel > 0) minOf(it.currentQty, it.parLevel) else 0.0 }
+                val pct = if (parSum > 0) ((stockCapped / parSum) * 100.0).toInt().coerceIn(0, 100) else 100
+                GroupSummary(
+                    name = cat,
+                    itemCount = list.size,
+                    lowStockCount = list.count { it.isLowStock },
+                    readinessPct = pct
+                )
+            }
+            .sortedByDescending { it.itemCount }
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    val locationSummaries: StateFlow<List<GroupSummary>> = allInventory.map { items ->
+        items.groupBy { it.location.trim().ifEmpty { "Unassigned" } }
+            .map { (loc, list) ->
+                val parSum = list.sumOf { if (it.parLevel > 0) it.parLevel else 0.0 }
+                val stockCapped = list.sumOf { if (it.parLevel > 0) minOf(it.currentQty, it.parLevel) else 0.0 }
+                val pct = if (parSum > 0) ((stockCapped / parSum) * 100.0).toInt().coerceIn(0, 100) else 100
+                GroupSummary(
+                    name = loc,
+                    itemCount = list.size,
+                    lowStockCount = list.count { it.isLowStock },
+                    readinessPct = pct
+                )
+            }
+            .sortedByDescending { it.itemCount }
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     init {
         // Initial check for updates (throttled)
@@ -275,11 +327,12 @@ class MainViewModel(
     fun openFilteredInventory(
         lowStockOnly: Boolean = false,
         expiringOnly: Boolean = false,
-        category: String = "All"
+        category: String = "All",
+        location: String = "All"
     ) {
         searchQuery.value = ""
         categoryFilter.value = category
-        locationFilter.value = "All"
+        locationFilter.value = location
         lowStockOnlyFilter.value = lowStockOnly
         expiringOnlyFilter.value = expiringOnly
         currentTab.value = NavTab.INVENTORY
