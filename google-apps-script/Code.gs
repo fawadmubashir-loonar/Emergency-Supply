@@ -173,13 +173,10 @@ function authorizeAndTestAlerts() {
 }
 
 /**
- * Serves the mobile-friendly Family Pantry web app UI.
+ * Web App UI disabled / retired.
  */
 function doGet(e) {
-  return HtmlService.createHtmlOutputFromFile('Index')
-    .setTitle('Family Pantry · Rations Tracker')
-    .addMetaTag('viewport', 'width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover')
-    .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.DEFAULT);
+  return HtmlService.createHtmlOutput('<div style="font-family:sans-serif;padding:32px;text-align:center;"><h2>App Retired</h2><p>This web link has been disabled. Please use the Emergency Food Rations Android app.</p></div>').setTitle('Retired');
 }
 
 /**

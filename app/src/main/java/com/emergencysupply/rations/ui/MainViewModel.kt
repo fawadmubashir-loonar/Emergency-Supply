@@ -16,6 +16,7 @@ import com.emergencysupply.rations.updater.GitHubAsset
 import com.emergencysupply.rations.updater.GitHubSelfUpdater
 import com.emergencysupply.rations.updater.UpdateStatus
 import com.google.android.gms.auth.api.signin.GoogleSignInAccount
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -108,6 +109,26 @@ class MainViewModel(
     val lowStockOnlyFilter = MutableStateFlow(false)
     val expiringOnlyFilter = MutableStateFlow(false)
     val groceryStoreFilter = MutableStateFlow("All Stores")
+    val favoritesOnlyFilter = MutableStateFlow(false)
+
+    private val isForeground = MutableStateFlow(true)
+    private var lastForegroundSyncMs = 0L
+
+    fun onAppForeground() {
+        isForeground.value = true
+        val account = currentAccount.value
+        val now = System.currentTimeMillis()
+        if (account != null && now - lastForegroundSyncMs > 15_000L) {
+            lastForegroundSyncMs = now
+            viewModelScope.launch {
+                repository.syncWithGoogleSheets(account)
+            }
+        }
+    }
+
+    fun onAppBackground() {
+        isForeground.value = false
+    }
 
     private val customCategories = MutableStateFlow<List<String>>(emptyList())
     private val customLocations = MutableStateFlow<List<String>>(emptyList())
@@ -246,6 +267,19 @@ class MainViewModel(
         viewModelScope.launch {
             currentAccount.collect { account ->
                 if (account != null) {
+                    lastForegroundSyncMs = System.currentTimeMillis()
+                    repository.syncWithGoogleSheets(account)
+                }
+            }
+        }
+
+        // Real-time auto-polling every 45s while in foreground and signed in
+        viewModelScope.launch {
+            while (true) {
+                delay(45_000L)
+                val account = currentAccount.value
+                if (isForeground.value && account != null && syncState.value !is SyncState.Syncing) {
+                    lastForegroundSyncMs = System.currentTimeMillis()
                     repository.syncWithGoogleSheets(account)
                 }
             }
@@ -256,6 +290,12 @@ class MainViewModel(
         val account = currentAccount.value ?: return
         viewModelScope.launch {
             repository.syncWithGoogleSheets(account)
+        }
+    }
+
+    fun clearLocalDataOnSignOut() {
+        viewModelScope.launch {
+            repository.clearLocalCache()
         }
     }
 
@@ -347,9 +387,57 @@ class MainViewModel(
 
     fun addGroceryItem(name: String, qty: Double, unit: String, aisle: String, store: String) {
         val actor = currentAccount.value?.displayName ?: "Family Member"
+        val resolvedAisle = aisle.ifBlank { PreplannedCatalog.aisleForItem(name, "") }
         viewModelScope.launch {
-            repository.addGroceryItem(name, qty, unit, aisle, store, actor, currentAccount.value)
+            repository.addGroceryItem(name, qty, unit, resolvedAisle, store, actor, currentAccount.value)
         }
+    }
+
+    fun bumpOrUncheckGrocery(existingId: String, addQty: Double = 1.0) {
+        viewModelScope.launch {
+            repository.bumpOrUncheckGrocery(existingId, addQty, currentAccount.value)
+        }
+    }
+
+    fun finishShoppingTrip(checkedItems: List<GroceryItem>) {
+        val actor = currentAccount.value?.displayName ?: "Family Member"
+        viewModelScope.launch {
+            repository.finishShoppingTrip(checkedItems, actor, currentAccount.value)
+        }
+    }
+
+    fun buildShareableGroceryText(listFilter: String, items: List<GroceryItem>): String {
+        val unchecked = items.filter { !it.checked }
+        if (unchecked.isEmpty()) {
+            return "🛒 $listFilter\n\n(No items to buy)"
+        }
+        val grouped = unchecked.groupBy { item ->
+            item.aisle.ifBlank { PreplannedCatalog.aisleForItem(item.name, "") }.ifBlank { "General" }
+        }
+        val sb = StringBuilder()
+        sb.append("🛒 ").append(listFilter)
+        for ((aisle, aisleItems) in grouped) {
+            sb.append("\n\n")
+            val icon = PreplannedCatalog.iconForCategory(aisle)
+            val header = if (aisle.startsWith(icon) || aisle.any { Character.isSurrogate(it) }) {
+                aisle
+            } else {
+                "$icon $aisle"
+            }
+            sb.append(header)
+            for (item in aisleItems) {
+                val qtyStr = if (item.qty == item.qty.toLong().toDouble()) {
+                    item.qty.toLong().toString()
+                } else {
+                    String.format(java.util.Locale.US, "%.1f", item.qty)
+                }
+                val unitStr = item.unit.trim()
+                val qtyWithUnit = if (unitStr.isNotEmpty()) "$qtyStr $unitStr" else qtyStr
+                val detail = if (item.qty > 0) " ($qtyWithUnit)" else ""
+                sb.append("\n• ").append(item.name).append(detail)
+            }
+        }
+        return sb.toString()
     }
 
     fun toggleGroceryChecked(id: String, checked: Boolean) {

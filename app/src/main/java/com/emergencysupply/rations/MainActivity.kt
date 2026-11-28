@@ -47,6 +47,16 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    override fun onStart() {
+        super.onStart()
+        viewModel.onAppForeground()
+    }
+
+    override fun onStop() {
+        super.onStop()
+        viewModel.onAppBackground()
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
@@ -86,6 +96,7 @@ class MainActivity : ComponentActivity() {
                         signInLauncher.launch(app.googleAuthManager.getSignInIntent())
                     },
                     onSignOutClick = {
+                        viewModel.clearLocalDataOnSignOut()
                         app.googleAuthManager.signOut {
                             Toast.makeText(this, "Signed out", Toast.LENGTH_SHORT).show()
                         }

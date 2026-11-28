@@ -91,6 +91,7 @@ import com.emergencysupply.rations.ui.theme.SuccessGreen
 import com.emergencysupply.rations.ui.theme.TealPrimary
 import com.emergencysupply.rations.ui.theme.TealSoft
 import com.emergencysupply.rations.ui.theme.WarningAmber
+import com.emergencysupply.rations.ui.theme.WarningSoft
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 import java.util.UUID
@@ -946,6 +947,32 @@ fun PreplannedAndCustomAddSheet(
                         shape = RoundedCornerShape(14.dp),
                         modifier = Modifier.fillMaxWidth()
                     )
+
+                    if (name.isNotBlank()) {
+                        val potentialDupes = remember(name, existingItems) {
+                            val q = name.trim()
+                            existingItems.filter { it.name.contains(q, ignoreCase = true) }.take(2)
+                        }
+                        if (potentialDupes.isNotEmpty()) {
+                            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                potentialDupes.forEach { dup ->
+                                    Surface(
+                                        shape = RoundedCornerShape(10.dp),
+                                        color = WarningSoft,
+                                        border = BorderStroke(1.dp, WarningAmber.copy(alpha = 0.5f))
+                                    ) {
+                                        Text(
+                                            text = "Already in Pantry: ${dup.name} (Qty %.0f %s)".format(dup.currentQty, dup.unit),
+                                            fontSize = 11.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            color = MidnightSlate,
+                                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
 
                     Text("Category", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = MidnightSlate)
                     LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {

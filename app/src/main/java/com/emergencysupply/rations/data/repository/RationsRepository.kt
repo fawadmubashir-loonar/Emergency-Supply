@@ -1,5 +1,6 @@
 package com.emergencysupply.rations.data.repository
 
+import com.emergencysupply.rations.data.PreplannedCatalog
 import com.emergencysupply.rations.data.local.RationsDatabase
 import com.emergencysupply.rations.data.local.entity.AppSettingsEntity
 import com.emergencysupply.rations.data.local.entity.GroceryItem
@@ -297,12 +298,14 @@ class RationsRepository(
         actor: String,
         account: GoogleSignInAccount?
     ) {
+        val resolvedAisle = aisle.ifBlank { PreplannedCatalog.aisleForItem(name, "") }
         val now = dateFormat.format(Date())
         val existing = groceryDao.findUncheckedByName(name)
         val targetId: String
         if (existing != null) {
             val updated = existing.copy(
                 qty = existing.qty + qty,
+                aisle = if (existing.aisle.isBlank()) resolvedAisle else existing.aisle,
                 updatedAt = now,
                 syncPending = true
             )
@@ -314,7 +317,7 @@ class RationsRepository(
                 name = name,
                 qty = qty,
                 unit = unit,
-                aisle = aisle,
+                aisle = resolvedAisle,
                 store = store,
                 checked = false,
                 favorite = false,
@@ -397,6 +400,154 @@ class RationsRepository(
         }
     }
 
+    suspend fun bumpOrUncheckGrocery(existingId: String, addQty: Double, account: GoogleSignInAccount?) {
+        val currentItem = groceryDao.getAllGroceriesOnce().firstOrNull { it.id == existingId } ?: return
+        val now = dateFormat.format(Date())
+        val updatedItem = if (currentItem.checked) {
+            currentItem.copy(
+                checked = false,
+                qty = maxOf(currentItem.qty, addQty),
+                updatedAt = now,
+                syncPending = true
+            )
+        } else {
+            currentItem.copy(
+                qty = currentItem.qty + addQty,
+                updatedAt = now,
+                syncPending = true
+            )
+        }
+        groceryDao.update(updatedItem)
+        syncDao.insertAction(
+            PendingSyncAction(
+                actionType = "TOGGLE_GROCERY",
+                targetId = existingId,
+                payloadJson = "{\"checked\": ${updatedItem.checked}, \"qty\": ${updatedItem.qty}}"
+            )
+        )
+        if (account != null) {
+            triggerBackgroundSync(account)
+        }
+    }
+
+    suspend fun finishShoppingTrip(checkedItems: List<GroceryItem>, actor: String, account: GoogleSignInAccount?) {
+        if (checkedItems.isEmpty()) return
+        val now = dateFormat.format(Date())
+        val allItems = inventoryDao.getAllItemsOnce().toMutableList()
+
+        for (item in checkedItems) {
+            val matchIndex = allItems.indexOfFirst { it.name.equals(item.name, ignoreCase = true) }
+            val targetId: String
+            val finalQty: Double
+            if (matchIndex != -1) {
+                val match = allItems[matchIndex]
+                val newQty = match.currentQty + item.qty
+                val newStockIn = match.stockIn + item.qty
+                val restockNeeded = maxOf(0.0, match.parLevel - newQty)
+                val stockStatus = if (newQty < match.parLevel) "LOW" else "OK"
+                val totalServings = newQty * match.servingsPerUnit
+                val updated = match.copy(
+                    stockIn = newStockIn,
+                    currentQty = newQty,
+                    restockNeeded = restockNeeded,
+                    stockStatus = stockStatus,
+                    totalServings = totalServings,
+                    lastUpdated = now,
+                    syncPending = true
+                )
+                inventoryDao.updateItem(updated)
+                allItems[matchIndex] = updated
+                targetId = updated.id
+                finalQty = newQty
+
+                val historyEntry = HistoryLogEntry(
+                    timestamp = now,
+                    action = "RESTOCK",
+                    category = updated.category,
+                    itemName = updated.name,
+                    change = item.qty,
+                    newStock = newQty,
+                    unit = updated.unit,
+                    expirationDate = updated.earliestExpiry,
+                    notes = "Shopping trip restock by $actor",
+                    syncPending = true
+                )
+                historyDao.insert(historyEntry)
+            } else {
+                val resolvedCategory = item.aisle.ifBlank { PreplannedCatalog.aisleForItem(item.name, "") }
+                    .ifBlank { "Canned Goods & Produce" }
+                val newId = "RATION-" + java.util.UUID.randomUUID().toString().take(6).uppercase()
+                val parLevel = maxOf(item.qty, 2.0)
+                val restockNeeded = maxOf(0.0, parLevel - item.qty)
+                val stockStatus = if (item.qty < parLevel) "LOW" else "OK"
+                val servingsPerUnit = 1.0
+                val totalServings = item.qty * servingsPerUnit
+                val newItem = InventoryItem(
+                    id = newId,
+                    name = item.name,
+                    category = resolvedCategory,
+                    unit = item.unit.ifBlank { "packs" },
+                    location = "Main Pantry",
+                    initialQty = item.qty,
+                    stockIn = item.qty,
+                    stockOut = 0.0,
+                    currentQty = item.qty,
+                    parLevel = parLevel,
+                    restockNeeded = restockNeeded,
+                    earliestExpiry = null,
+                    daysUntilExpiry = null,
+                    expirationStatus = "UNKNOWN",
+                    stockStatus = stockStatus,
+                    servingsPerUnit = servingsPerUnit,
+                    totalServings = totalServings,
+                    notes = "Added from Shopping Trip ($actor)",
+                    lastUpdated = now,
+                    syncPending = true
+                )
+                inventoryDao.insertItem(newItem)
+                allItems.add(newItem)
+                targetId = newItem.id
+                finalQty = item.qty
+
+                val historyEntry = HistoryLogEntry(
+                    timestamp = now,
+                    action = "RESTOCK",
+                    category = newItem.category,
+                    itemName = newItem.name,
+                    change = item.qty,
+                    newStock = newItem.currentQty,
+                    unit = newItem.unit,
+                    expirationDate = null,
+                    notes = "Shopping trip restock by $actor",
+                    syncPending = true
+                )
+                historyDao.insert(historyEntry)
+            }
+
+            syncDao.insertAction(
+                PendingSyncAction(
+                    actionType = "RESTOCK_ITEM",
+                    targetId = targetId,
+                    payloadJson = "{\"change\": ${item.qty}, \"newStock\": $finalQty}"
+                )
+            )
+
+            groceryDao.deleteById(item.id)
+        }
+
+        syncDao.insertAction(
+            PendingSyncAction(
+                actionType = "CLEAR_GROCERIES",
+                targetId = "trip_finish",
+                payloadJson = "{}"
+            )
+        )
+
+        if (account != null) {
+            triggerBackgroundSync(account)
+        }
+    }
+
     suspend fun syncWithGoogleSheets(account: GoogleSignInAccount) {
         syncMutex.withLock {
             _syncState.value = SyncState.Syncing
@@ -425,6 +576,16 @@ class RationsRepository(
             } catch (e: Exception) {
                 _syncState.value = SyncState.Error(e.message ?: "Sync failed. Working in offline mode.")
             }
+        }
+    }
+
+    suspend fun clearLocalCache() {
+        syncMutex.withLock {
+            inventoryDao.clearAll()
+            groceryDao.clearAll()
+            historyDao.clearAll()
+            syncDao.clearAll()
+            _syncState.value = SyncState.Idle
         }
     }
 

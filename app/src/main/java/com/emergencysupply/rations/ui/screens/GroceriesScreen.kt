@@ -1,5 +1,6 @@
 package com.emergencysupply.rations.ui.screens
 
+import android.content.Intent
 import android.widget.Toast
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
@@ -25,6 +26,9 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.DeleteSweep
 import androidx.compose.material.icons.filled.Inventory
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.KeyboardArrowUp
+import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.ShoppingCart
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.outlined.StarOutline
@@ -56,11 +60,16 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.emergencysupply.rations.data.PlannedRationTemplate
 import com.emergencysupply.rations.data.PreplannedCatalog
 import com.emergencysupply.rations.data.local.entity.GroceryItem
+import com.emergencysupply.rations.data.local.entity.InventoryItem
 import com.emergencysupply.rations.ui.MainViewModel
+import com.emergencysupply.rations.ui.components.categoryVisualFor
 import com.emergencysupply.rations.ui.theme.BorderSlate
 import com.emergencysupply.rations.ui.theme.CardSurface
+import com.emergencysupply.rations.ui.theme.CobaltBlue
+import com.emergencysupply.rations.ui.theme.CobaltSoft
 import com.emergencysupply.rations.ui.theme.DangerRed
 import com.emergencysupply.rations.ui.theme.DangerSoft
 import com.emergencysupply.rations.ui.theme.DarkSlate
@@ -71,9 +80,22 @@ import com.emergencysupply.rations.ui.theme.MidnightSlate
 import com.emergencysupply.rations.ui.theme.MutedSlate
 import com.emergencysupply.rations.ui.theme.OrangeAccent
 import com.emergencysupply.rations.ui.theme.SoftTileSurface
+import com.emergencysupply.rations.ui.theme.SuccessGreen
+import com.emergencysupply.rations.ui.theme.SuccessSoft
 import com.emergencysupply.rations.ui.theme.TealPrimary
 import com.emergencysupply.rations.ui.theme.TealSoft
 import com.emergencysupply.rations.ui.theme.WarningAmber
+
+data class GrocerySuggestion(
+    val name: String,
+    val existingGrocery: GroceryItem? = null,
+    val pantryItem: InventoryItem? = null,
+    val catalogTemplate: PlannedRationTemplate? = null,
+    val defaultQty: Double = 1.0,
+    val defaultUnit: String = "packs",
+    val aisle: String = "General",
+    val icon: String = "📦"
+)
 
 @Composable
 fun GroceriesScreen(viewModel: MainViewModel) {
@@ -81,14 +103,16 @@ fun GroceriesScreen(viewModel: MainViewModel) {
     val groceries by viewModel.allGroceries.collectAsState()
     val allInventory by viewModel.allInventory.collectAsState()
     val selectedStore by viewModel.groceryStoreFilter.collectAsState()
+    val favoritesOnly by viewModel.favoritesOnlyFilter.collectAsState()
 
     var newName by remember { mutableStateOf("") }
     var newQty by remember { mutableStateOf("1") }
     var newUnit by remember { mutableStateOf("packs") }
     var newStore by remember { mutableStateOf("Grocery Store") }
     var newAisle by remember { mutableStateOf("General") }
+    var cartExpanded by remember { mutableStateOf(true) }
 
-    val storeOptions = listOf("All Stores", "Costco", "Halal Market", "Grocery Store", "Target", "Other")
+    val storeOptions = PreplannedCatalog.groceryPurposeLists
 
     val quickPickItems = remember(allInventory) {
         val lowNames = allInventory.filter { it.isLowStock }.map { it.name }
@@ -96,11 +120,83 @@ fun GroceriesScreen(viewModel: MainViewModel) {
     }
 
     val filteredGroceries = groceries.filter {
-        selectedStore == "All Stores" || it.store.equals(selectedStore, ignoreCase = true)
+        selectedStore == "All Lists" || selectedStore == "All Stores" || it.store.equals(selectedStore, ignoreCase = true)
     }
 
-    val checkedCount = filteredGroceries.count { it.checked }
-    val uncheckedCount = filteredGroceries.size - checkedCount
+    val uncheckedItems = filteredGroceries.filter { !it.checked && (!favoritesOnly || it.favorite) }
+    val checkedItems = filteredGroceries.filter { it.checked && (!favoritesOnly || it.favorite) }
+
+    // Smart As-You-Type Autocomplete + Duplicate Guard matches (up to 6)
+    val autocompleteSuggestions = remember(newName, groceries, allInventory) {
+        val q = newName.trim()
+        if (q.isBlank()) {
+            emptyList()
+        } else {
+            val results = mutableListOf<GrocerySuggestion>()
+            val seenNames = mutableSetOf<String>()
+
+            // 1. Matches in groceries
+            for (g in groceries) {
+                if (g.name.contains(q, ignoreCase = true) && seenNames.add(g.name.lowercase())) {
+                    val resolvedAisle = g.aisle.ifBlank { PreplannedCatalog.aisleForItem(g.name, "") }
+                    results.add(
+                        GrocerySuggestion(
+                            name = g.name,
+                            existingGrocery = g,
+                            defaultQty = g.qty,
+                            defaultUnit = g.unit,
+                            aisle = resolvedAisle,
+                            icon = if (g.favorite) "⭐" else PreplannedCatalog.iconForItem(g.name, resolvedAisle)
+                        )
+                    )
+                    if (results.size >= 6) break
+                }
+            }
+
+            // 2. Matches in pantry inventory
+            if (results.size < 6) {
+                for (inv in allInventory) {
+                    if (inv.name.contains(q, ignoreCase = true) && seenNames.add(inv.name.lowercase())) {
+                        val needQty = if (inv.parLevel > inv.currentQty) maxOf(1.0, inv.parLevel - inv.currentQty) else 1.0
+                        val resolvedAisle = inv.category.ifBlank { PreplannedCatalog.aisleForItem(inv.name, "") }
+                        results.add(
+                            GrocerySuggestion(
+                                name = inv.name,
+                                pantryItem = inv,
+                                defaultQty = needQty,
+                                defaultUnit = inv.unit.ifBlank { "packs" },
+                                aisle = resolvedAisle,
+                                icon = "📦"
+                            )
+                        )
+                        if (results.size >= 6) break
+                    }
+                }
+            }
+
+            // 3. Matches in preplanned catalog
+            if (results.size < 6) {
+                for (tpl in PreplannedCatalog.plannedRations) {
+                    if (tpl.name.contains(q, ignoreCase = true) && seenNames.add(tpl.name.lowercase())) {
+                        val resolvedAisle = tpl.category.ifBlank { PreplannedCatalog.aisleForItem(tpl.name, "") }
+                        results.add(
+                            GrocerySuggestion(
+                                name = tpl.name,
+                                catalogTemplate = tpl,
+                                defaultQty = tpl.defaultQty,
+                                defaultUnit = tpl.unit.ifBlank { "packs" },
+                                aisle = resolvedAisle,
+                                icon = tpl.icon
+                            )
+                        )
+                        if (results.size >= 6) break
+                    }
+                }
+            }
+
+            results.take(6)
+        }
+    }
 
     LazyColumn(
         modifier = Modifier
@@ -108,7 +204,81 @@ fun GroceriesScreen(viewModel: MainViewModel) {
             .padding(horizontal = 16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        // 1. Quick Add Section
+        // 1. Top Action & Favorites Bar
+        item {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 4.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                // Favorites toggle chip
+                Surface(
+                    shape = RoundedCornerShape(18.dp),
+                    color = if (favoritesOnly) WarningAmber else CardSurface,
+                    border = BorderStroke(1.dp, if (favoritesOnly) WarningAmber else BorderSlate),
+                    shadowElevation = if (favoritesOnly) 2.dp else 1.dp,
+                    modifier = Modifier.clickable { viewModel.favoritesOnlyFilter.value = !favoritesOnly }
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            imageVector = if (favoritesOnly) Icons.Default.Star else Icons.Outlined.StarOutline,
+                            contentDescription = "Favorites",
+                            tint = if (favoritesOnly) Color.White else WarningAmber,
+                            modifier = Modifier.size(16.dp)
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(
+                            text = if (favoritesOnly) "Favorites Only" else "⭐ Favorites",
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = if (favoritesOnly) Color.White else DarkSlate
+                        )
+                    }
+                }
+
+                // Share button
+                Surface(
+                    shape = RoundedCornerShape(18.dp),
+                    color = CardSurface,
+                    border = BorderStroke(1.dp, CobaltBlue.copy(alpha = 0.3f)),
+                    shadowElevation = 1.dp,
+                    modifier = Modifier.clickable {
+                        val shareText = viewModel.buildShareableGroceryText(selectedStore, filteredGroceries)
+                        val sendIntent = Intent(Intent.ACTION_SEND).apply {
+                            type = "text/plain"
+                            putExtra(Intent.EXTRA_TEXT, shareText)
+                        }
+                        context.startActivity(Intent.createChooser(sendIntent, "Share Grocery List"))
+                    }
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Share,
+                            contentDescription = "Share",
+                            tint = CobaltBlue,
+                            modifier = Modifier.size(16.dp)
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(
+                            text = "📤 Share",
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = CobaltBlue
+                        )
+                    }
+                }
+            }
+        }
+
+        // 2. Quick Add Section + Smart As-You-Type Autocomplete & Duplicate Guard
         item {
             Card(
                 modifier = Modifier.fillMaxWidth(),
@@ -131,13 +301,14 @@ fun GroceriesScreen(viewModel: MainViewModel) {
                                 shape = RoundedCornerShape(16.dp),
                                 color = TealSoft,
                                 modifier = Modifier.clickable {
-                                    val targetStore = if (selectedStore != "All Stores") selectedStore else newStore
+                                    val targetStore = if (selectedStore != "All Stores" && selectedStore != "All Lists") selectedStore else newStore
                                     val matchInv = allInventory.firstOrNull { it.name.equals(pick, ignoreCase = true) }
+                                    val resolvedAisle = matchInv?.category?.ifBlank { PreplannedCatalog.aisleForItem(pick, "") } ?: PreplannedCatalog.aisleForItem(pick, "")
                                     viewModel.addGroceryItem(
                                         name = pick,
                                         qty = matchInv?.let { maxOf(1.0, it.parLevel - it.currentQty) } ?: 1.0,
                                         unit = matchInv?.unit?.ifBlank { "packs" } ?: "packs",
-                                        aisle = matchInv?.category ?: "General",
+                                        aisle = resolvedAisle,
                                         store = targetStore
                                     )
                                     Toast.makeText(context, "Added $pick to $targetStore", Toast.LENGTH_SHORT).show()
@@ -196,12 +367,14 @@ fun GroceriesScreen(viewModel: MainViewModel) {
                             onClick = {
                                 if (newName.isNotBlank()) {
                                     val qtyVal = newQty.toDoubleOrNull() ?: 1.0
+                                    val targetStore = if (selectedStore != "All Stores" && selectedStore != "All Lists") selectedStore else newStore
+                                    val targetAisle = newAisle.ifBlank { PreplannedCatalog.aisleForItem(newName.trim(), "") }
                                     viewModel.addGroceryItem(
                                         name = newName.trim(),
                                         qty = qtyVal,
                                         unit = newUnit.trim(),
-                                        aisle = newAisle.trim(),
-                                        store = if (selectedStore != "All Stores") selectedStore else newStore
+                                        aisle = targetAisle,
+                                        store = targetStore
                                     )
                                     newName = ""
                                     newQty = "1"
@@ -216,15 +389,146 @@ fun GroceriesScreen(viewModel: MainViewModel) {
                         }
                     }
 
+                    // Smart As-You-Type Autocomplete + Duplicate Guard (#1)
+                    if (newName.isNotBlank() && autocompleteSuggestions.isNotEmpty()) {
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Surface(
+                            shape = RoundedCornerShape(16.dp),
+                            color = SoftTileSurface,
+                            border = BorderStroke(1.dp, BorderSlate),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Column(
+                                modifier = Modifier.padding(10.dp),
+                                verticalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                Text(
+                                    text = "Smart Suggestions & Duplicate Guard",
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MediumSlate,
+                                    modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp)
+                                )
+
+                                autocompleteSuggestions.forEach { suggestion ->
+                                    Surface(
+                                        shape = RoundedCornerShape(12.dp),
+                                        color = CardSurface,
+                                        border = BorderStroke(0.5.dp, BorderSlate),
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .clickable {
+                                                if (suggestion.existingGrocery != null) {
+                                                    viewModel.bumpOrUncheckGrocery(suggestion.existingGrocery.id, 1.0)
+                                                    val statusMsg = if (suggestion.existingGrocery.checked) "Restored to list (+1)" else "Bumped qty (+1)"
+                                                    Toast.makeText(context, "${suggestion.existingGrocery.name}: $statusMsg", Toast.LENGTH_SHORT).show()
+                                                    newName = ""
+                                                } else {
+                                                    val targetStore = if (selectedStore != "All Stores" && selectedStore != "All Lists") selectedStore else newStore
+                                                    val resolvedAisle = suggestion.aisle.ifBlank { PreplannedCatalog.aisleForItem(suggestion.name, "") }
+                                                    viewModel.addGroceryItem(
+                                                        name = suggestion.name,
+                                                        qty = suggestion.defaultQty,
+                                                        unit = suggestion.defaultUnit,
+                                                        aisle = resolvedAisle,
+                                                        store = targetStore
+                                                    )
+                                                    Toast.makeText(context, "Added ${suggestion.name} to $targetStore", Toast.LENGTH_SHORT).show()
+                                                    newName = ""
+                                                }
+                                            }
+                                    ) {
+                                        Row(
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .padding(horizontal = 10.dp, vertical = 8.dp),
+                                            horizontalArrangement = Arrangement.SpaceBetween,
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            Row(
+                                                modifier = Modifier.weight(1f),
+                                                verticalAlignment = Alignment.CenterVertically
+                                            ) {
+                                                Text(suggestion.icon, fontSize = 16.sp)
+                                                Spacer(modifier = Modifier.width(8.dp))
+                                                Column {
+                                                    Text(
+                                                        text = suggestion.name,
+                                                        fontSize = 13.sp,
+                                                        fontWeight = FontWeight.Bold,
+                                                        color = MidnightSlate
+                                                    )
+                                                    if (suggestion.pantryItem != null) {
+                                                        Text(
+                                                            text = "📦 Qty %.0f %s in Pantry (Par %.0f)".format(
+                                                                suggestion.pantryItem.currentQty,
+                                                                suggestion.pantryItem.unit,
+                                                                suggestion.pantryItem.parLevel
+                                                            ),
+                                                            fontSize = 10.sp,
+                                                            color = MediumSlate
+                                                        )
+                                                    } else {
+                                                        Text(
+                                                            text = suggestion.aisle,
+                                                            fontSize = 10.sp,
+                                                            color = LightSlate
+                                                        )
+                                                    }
+                                                }
+                                            }
+
+                                            Spacer(modifier = Modifier.width(6.dp))
+
+                                            if (suggestion.existingGrocery != null) {
+                                                if (suggestion.existingGrocery.checked) {
+                                                    Surface(shape = RoundedCornerShape(8.dp), color = SuccessSoft) {
+                                                        Text(
+                                                            text = "✓ In Cart",
+                                                            fontSize = 10.sp,
+                                                            fontWeight = FontWeight.Bold,
+                                                            color = SuccessGreen,
+                                                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                                                        )
+                                                    }
+                                                } else {
+                                                    Surface(shape = RoundedCornerShape(8.dp), color = CobaltSoft) {
+                                                        Text(
+                                                            text = "On List",
+                                                            fontSize = 10.sp,
+                                                            fontWeight = FontWeight.Bold,
+                                                            color = CobaltBlue,
+                                                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                                                        )
+                                                    }
+                                                }
+                                            } else {
+                                                Surface(shape = RoundedCornerShape(8.dp), color = TealSoft) {
+                                                    Text(
+                                                        text = suggestion.aisle.ifBlank { PreplannedCatalog.aisleForItem(suggestion.name, "") },
+                                                        fontSize = 10.sp,
+                                                        fontWeight = FontWeight.Bold,
+                                                        color = TealPrimary,
+                                                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                                                    )
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+
                     Spacer(modifier = Modifier.height(10.dp))
 
                     LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
                         item {
                             Text(text = "Store:", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = MediumSlate)
                         }
-                        val storeQuickList = listOf("Grocery Store", "Costco", "Halal Market", "Target")
+                        val storeQuickList = listOf("Weekly Groceries", "Costco", "Halal Market", "Grocery Store", "Target", "Emergency Resupply")
                         items(storeQuickList) { s ->
-                            val isSel = (if (selectedStore != "All Stores") selectedStore else newStore).equals(s, ignoreCase = true)
+                            val isSel = (if (selectedStore != "All Stores" && selectedStore != "All Lists") selectedStore else newStore).equals(s, ignoreCase = true)
                             Surface(
                                 shape = RoundedCornerShape(10.dp),
                                 color = if (isSel) InkBlack else SoftTileSurface,
@@ -245,23 +549,29 @@ fun GroceriesScreen(viewModel: MainViewModel) {
             }
         }
 
-        // 2. Store Filter Pills
+        // 3. Multiple Purpose / Store Lists (#7)
         item {
             LazyRow(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(6.dp)
             ) {
                 items(storeOptions) { store ->
-                    val isSelected = selectedStore.equals(store, ignoreCase = true)
-                    val storeItemCount = if (store == "All Stores") groceries.size else groceries.count { it.store.equals(store, ignoreCase = true) }
+                    val isSelected = selectedStore.equals(store, ignoreCase = true) ||
+                            ((selectedStore == "All Lists" || selectedStore == "All Stores") && (store == "All Lists" || store == "All Stores"))
+                    val unchCount = if (store == "All Lists" || store == "All Stores") {
+                        groceries.count { !it.checked }
+                    } else {
+                        groceries.count { !it.checked && it.store.equals(store, ignoreCase = true) }
+                    }
                     Surface(
                         shape = RoundedCornerShape(20.dp),
                         color = if (isSelected) OrangeAccent else CardSurface,
                         border = BorderStroke(1.dp, if (isSelected) OrangeAccent else BorderSlate),
+                        shadowElevation = if (isSelected) 2.dp else 1.dp,
                         modifier = Modifier.clickable { viewModel.groceryStoreFilter.value = store }
                     ) {
                         Text(
-                            text = if (storeItemCount > 0) "$store ($storeItemCount)" else store,
+                            text = if (unchCount > 0) "$store ($unchCount)" else store,
                             fontSize = 12.sp,
                             fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
                             color = if (isSelected) Color.White else DarkSlate,
@@ -272,7 +582,7 @@ fun GroceriesScreen(viewModel: MainViewModel) {
             }
         }
 
-        // 3. Header & Clear Action Row
+        // 4. Header & Count Status Row
         item {
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -280,29 +590,30 @@ fun GroceriesScreen(viewModel: MainViewModel) {
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
-                    text = "$uncheckedCount to buy ($checkedCount checked)",
+                    text = "${uncheckedItems.size} to buy (${checkedItems.size} in cart)",
                     fontSize = 13.sp,
                     fontWeight = FontWeight.Bold,
                     color = MidnightSlate
                 )
 
-                if (checkedCount > 0) {
+                if (checkedItems.isNotEmpty()) {
                     OutlinedButton(
                         onClick = { viewModel.clearCheckedGroceries() },
                         shape = RoundedCornerShape(10.dp),
                         border = BorderStroke(1.dp, DangerRed.copy(alpha = 0.4f)),
-                        colors = ButtonDefaults.outlinedButtonColors(containerColor = DangerSoft)
+                        colors = ButtonDefaults.outlinedButtonColors(containerColor = DangerSoft),
+                        modifier = Modifier.height(32.dp)
                     ) {
-                        Icon(imageVector = Icons.Default.DeleteSweep, contentDescription = null, modifier = Modifier.size(16.dp), tint = DangerRed)
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Text(text = "Clear ($checkedCount)", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = DangerRed)
+                        Icon(imageVector = Icons.Default.DeleteSweep, contentDescription = null, modifier = Modifier.size(15.dp), tint = DangerRed)
+                        Spacer(modifier = Modifier.width(3.dp))
+                        Text(text = "Clear Cart (${checkedItems.size})", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = DangerRed)
                     }
                 }
             }
         }
 
-        // 4. Checklist
-        if (filteredGroceries.isEmpty()) {
+        // 5. Aisle-by-Aisle Auto-Grouping (#2) for Unchecked Items
+        if (uncheckedItems.isEmpty() && checkedItems.isEmpty()) {
             item {
                 Card(
                     modifier = Modifier.fillMaxWidth(),
@@ -321,36 +632,60 @@ fun GroceriesScreen(viewModel: MainViewModel) {
                                 }
                             }
                             Spacer(modifier = Modifier.height(10.dp))
-                            Text("Shopping list clear! 🎉", fontSize = 15.sp, fontWeight = FontWeight.Bold, color = MidnightSlate)
+                            Text(
+                                text = if (favoritesOnly) "No favorite grocery items! ⭐" else "Shopping list clear! 🎉",
+                                fontSize = 15.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = MidnightSlate
+                            )
                             Spacer(modifier = Modifier.height(4.dp))
-                            Text("Tap any quick-pick chip above to add items.", fontSize = 12.sp, color = MediumSlate)
+                            Text("Tap any quick-pick chip above or type to add items.", fontSize = 12.sp, color = MediumSlate)
                         }
                     }
                 }
             }
         } else {
-            val byStore = filteredGroceries.groupBy { it.store }
-            byStore.forEach { (store, itemsInStore) ->
-                item {
+            val itemsByAisle = uncheckedItems.groupBy {
+                it.aisle.ifBlank { PreplannedCatalog.aisleForItem(it.name, "") }
+            }
+
+            itemsByAisle.forEach { (aisleName, itemsInAisle) ->
+                item(key = "aisle_hdr_$aisleName") {
+                    val visual = categoryVisualFor(aisleName)
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier.padding(top = 4.dp)
+                        modifier = Modifier.padding(top = 8.dp, bottom = 2.dp)
                     ) {
-                        Surface(shape = RoundedCornerShape(8.dp), color = TealSoft) {
-                            Text(
-                                text = "📍 $store",
-                                fontSize = 12.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = TealPrimary,
-                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
-                            )
+                        Surface(
+                            shape = RoundedCornerShape(10.dp),
+                            color = visual.tint,
+                            modifier = Modifier.size(28.dp)
+                        ) {
+                            Box(contentAlignment = Alignment.Center) {
+                                Text(PreplannedCatalog.iconForItem(aisleName, aisleName), fontSize = 14.sp)
+                            }
                         }
                         Spacer(modifier = Modifier.width(8.dp))
-                        Text(text = "${itemsInStore.size} items", fontSize = 11.sp, color = LightSlate)
+                        Text(
+                            text = aisleName,
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.ExtraBold,
+                            color = MidnightSlate
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Surface(shape = RoundedCornerShape(8.dp), color = visual.tint) {
+                            Text(
+                                text = "${itemsInAisle.size}",
+                                fontSize = 10.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = Color.White,
+                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                            )
+                        }
                     }
                 }
 
-                items(itemsInStore, key = { "groc_${store}_${it.id}" }) { item ->
+                items(itemsInAisle, key = { "groc_${it.id}" }) { item ->
                     ReformedGroceryItemCard(
                         item = item,
                         onToggleChecked = { viewModel.toggleGroceryChecked(item.id, !item.checked) },
@@ -361,6 +696,111 @@ fun GroceriesScreen(viewModel: MainViewModel) {
                         },
                         onDelete = { viewModel.deleteGrocery(item.id) }
                     )
+                }
+            }
+        }
+
+        // 6. Collapsible "✓ In Cart" Sink-to-Bottom Drawer (#4)
+        if (checkedItems.isNotEmpty()) {
+            item(key = "in_cart_drawer") {
+                Card(
+                    modifier = Modifier.fillMaxWidth().padding(top = 10.dp),
+                    shape = RoundedCornerShape(20.dp),
+                    colors = CardDefaults.cardColors(containerColor = CardSurface),
+                    elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+                ) {
+                    Column(modifier = Modifier.padding(14.dp)) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable { cartExpanded = !cartExpanded },
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Row(
+                                modifier = Modifier.weight(1f),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Surface(shape = CircleShape, color = SuccessSoft, modifier = Modifier.size(28.dp)) {
+                                    Box(contentAlignment = Alignment.Center) {
+                                        Text("✓", fontSize = 14.sp, fontWeight = FontWeight.Black, color = SuccessGreen)
+                                    }
+                                }
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text(
+                                    text = "In Cart (${checkedItems.size})",
+                                    fontSize = 14.sp,
+                                    fontWeight = FontWeight.ExtraBold,
+                                    color = MidnightSlate
+                                )
+                            }
+
+                            Row(
+                                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Button(
+                                    onClick = {
+                                        viewModel.finishShoppingTrip(checkedItems)
+                                        Toast.makeText(context, "Finish Trip! Restocked ${checkedItems.size} items to Pantry 🎉", Toast.LENGTH_SHORT).show()
+                                    },
+                                    shape = RoundedCornerShape(12.dp),
+                                    colors = ButtonDefaults.buttonColors(containerColor = SuccessGreen),
+                                    modifier = Modifier.height(34.dp)
+                                ) {
+                                    Text(
+                                        text = "Finish Trip → Pantry",
+                                        fontSize = 11.sp,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                }
+
+                                OutlinedButton(
+                                    onClick = { viewModel.clearCheckedGroceries() },
+                                    shape = RoundedCornerShape(12.dp),
+                                    border = BorderStroke(1.dp, DangerRed.copy(alpha = 0.4f)),
+                                    colors = ButtonDefaults.outlinedButtonColors(containerColor = DangerSoft),
+                                    modifier = Modifier.height(34.dp)
+                                ) {
+                                    Text(
+                                        text = "Clear",
+                                        fontSize = 11.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = DangerRed
+                                    )
+                                }
+
+                                IconButton(
+                                    onClick = { cartExpanded = !cartExpanded },
+                                    modifier = Modifier.size(32.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = if (cartExpanded) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
+                                        contentDescription = if (cartExpanded) "Collapse" else "Expand",
+                                        tint = MediumSlate
+                                    )
+                                }
+                            }
+                        }
+
+                        if (cartExpanded) {
+                            Spacer(modifier = Modifier.height(10.dp))
+                            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                checkedItems.forEach { item ->
+                                    ReformedGroceryItemCard(
+                                        item = item,
+                                        onToggleChecked = { viewModel.toggleGroceryChecked(item.id, !item.checked) },
+                                        onToggleFavorite = { viewModel.toggleGroceryFavorite(item.id, !item.favorite) },
+                                        onMoveToPantry = {
+                                            viewModel.moveGroceryToPantry(item)
+                                            Toast.makeText(context, "Restocked +%.0f ${item.name} into Pantry!".format(item.qty), Toast.LENGTH_SHORT).show()
+                                        },
+                                        onDelete = { viewModel.deleteGrocery(item.id) }
+                                    )
+                                }
+                            }
+                        }
+                    }
                 }
             }
         }

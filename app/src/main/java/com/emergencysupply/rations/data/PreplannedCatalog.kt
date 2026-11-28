@@ -85,6 +85,17 @@ object PreplannedCatalog {
         "Diapers & Wipes", "Bottled Water", "Olive Oil", "Red Lentils", "Onions", "Potatoes"
     )
 
+    val groceryPurposeLists: List<String> = listOf(
+        "All Lists",
+        "Weekly Groceries",
+        "Costco",
+        "Halal Market",
+        "Grocery Store",
+        "Target",
+        "Emergency Resupply",
+        "Travel / Kit"
+    )
+
     val plannedRations = listOf(
         // Grains & Pasta
         PlannedRationTemplate("item-basmati-rice", "Basmati Rice", "Grains & Pasta", "lbs", "Main Pantry", 20.0, 180.0, 10.0, 18, "Long-grain sealed Mylar bags", "🍚"),
@@ -158,6 +169,32 @@ object PreplannedCatalog {
         PlannedRationTemplate("item-trash-bags", "Heavy Duty Trash Bags", "Essentials & First Aid", "boxes", "Garage Bins", 2.0, 5.0, 1.0, null, "Sanitation & storage", "🗑️"),
         PlannedRationTemplate("item-batteries", "AA / AAA Batteries & Flashlights", "Essentials & First Aid", "packs", "Closet / Hallway", 2.0, 6.0, 1.0, 60, "Power outage backup", "🔋")
     )
+
+    fun aisleForItem(name: String, category: String = ""): String {
+        val n = name.lowercase()
+        return when {
+            listOf("chicken", "beef", "lamb", "goat", "keema", "meat", "tuna", "fish", "salmon").any { n.contains(it) } ->
+                "🥩 Halal Meat & Seafood"
+            listOf("rice", "atta", "flour", "wheat", "oat", "cereal", "pasta", "macaroni", "bread", "paratha", "naan").any { n.contains(it) } ->
+                "🌾 Bulk Grains & Pasta"
+            listOf("milk", "egg", "butter", "ghee", "cheese", "yogurt").any { n.contains(it) } ->
+                "🥛 Dairy & Eggs"
+            listOf("onion", "potato", "vegetable", "veg", "pea", "berry", "berries", "frozen", "banana", "apple", "fruit").any { n.contains(it) } ->
+                "🥬 Fresh & Frozen"
+            listOf("tomato", "chickpea", "bean", "lentil", "daal", "soup", "peanut", "almond", "nut", "date", "honey", "cracker", "bar").any { n.contains(it) } ->
+                "🥫 Canned & Dry Goods"
+            listOf("formula", "pouch", "toddler", "diaper", "wipe", "vitamin").any { n.contains(it) } ->
+                "👶 Baby & Kids"
+            listOf("water", "tea", "chai", "coffee", "juice", "electrolyte").any { n.contains(it) } ->
+                "💧 Water & Drinks"
+            listOf("oil", "salt", "sugar", "spice", "masala").any { n.contains(it) } ->
+                "🫒 Oils & Spices"
+            listOf("aid", "bandage", "tylenol", "paper", "towel", "soap", "sanitizer", "trash", "batter", "flash").any { n.contains(it) } ->
+                "🧴 Household & First Aid"
+            category.isNotBlank() -> category
+            else -> "🛒 General Aisle"
+        }
+    }
 
     fun iconForItem(name: String, category: String): String {
         val n = name.lowercase()
