@@ -396,6 +396,15 @@ fun ReformedGroceryItemCard(
 
             Spacer(modifier = Modifier.width(12.dp))
 
+            val icon = PreplannedCatalog.iconForItem(item.name, item.aisle)
+            Surface(shape = RoundedCornerShape(10.dp), color = if (item.checked) Color(0xFFE2E8F0) else Color(0xFFDBEAFE), modifier = Modifier.size(34.dp)) {
+                Box(contentAlignment = Alignment.Center) {
+                    Text(icon, fontSize = 16.sp)
+                }
+            }
+
+            Spacer(modifier = Modifier.width(10.dp))
+
             Column(modifier = Modifier.weight(1f).clickable { onToggleChecked() }) {
                 Text(
                     text = item.name,

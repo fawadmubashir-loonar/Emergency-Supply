@@ -25,8 +25,27 @@ import kotlinx.coroutines.withContext
 class GoogleSheetsClient(private val context: Context) {
 
     private val spreadsheetId = BuildConfig.SPREADSHEET_ID
+    private val httpTransport = NetHttpTransport()
+    private val jsonFactory = GsonFactory.getDefaultInstance()
+
+    @Volatile
+    private var cachedAccountEmail: String? = null
+    @Volatile
+    private var cachedService: Sheets? = null
+
+    data class BatchSheetSnapshot(
+        val inventory: List<InventoryItem>,
+        val groceries: List<GroceryItem>,
+        val history: List<HistoryLogEntry>,
+        val settings: AppSettingsEntity
+    )
 
     private fun getSheetsService(account: GoogleSignInAccount): Sheets {
+        val email = account.email
+        val existing = cachedService
+        if (existing != null && cachedAccountEmail == email) {
+            return existing
+        }
         val credential = GoogleAccountCredential.usingOAuth2(
             context,
             listOf(SheetsScopes.SPREADSHEETS)
@@ -34,11 +53,46 @@ class GoogleSheetsClient(private val context: Context) {
             selectedAccount = account.account
         }
 
-        return Sheets.Builder(
-            NetHttpTransport(),
-            GsonFactory.getDefaultInstance(),
+        val created = Sheets.Builder(
+            httpTransport,
+            jsonFactory,
             credential
         ).setApplicationName("EmergencyFoodRations").build()
+
+        cachedAccountEmail = email
+        cachedService = created
+        return created
+    }
+
+    suspend fun fetchAllSheetsBatch(account: GoogleSignInAccount): BatchSheetSnapshot = withContext(Dispatchers.IO) {
+        val service = getSheetsService(account)
+        try {
+            val batchResp = service.spreadsheets().values()
+                .batchGet(spreadsheetId)
+                .setRanges(listOf("'Master Inventory'!A2:S", "'Groceries'!A2:J", "'History Log'!A2:I", "'Settings'!A2:B"))
+                .execute()
+
+            val ranges = batchResp.valueRanges ?: emptyList()
+            val invRows = ranges.getOrNull(0)?.getValues() ?: emptyList()
+            val grocRows = ranges.getOrNull(1)?.getValues() ?: emptyList()
+            val histRows = ranges.getOrNull(2)?.getValues() ?: emptyList()
+            val settingsRows = ranges.getOrNull(3)?.getValues() ?: emptyList()
+
+            BatchSheetSnapshot(
+                inventory = parseInventoryRows(invRows),
+                groceries = parseGroceryRows(grocRows),
+                history = parseHistoryRows(histRows),
+                settings = parseSettingsRows(settingsRows, account.email ?: "")
+            )
+        } catch (_: Exception) {
+            // Fallback gracefully if one sheet tab name differs
+            BatchSheetSnapshot(
+                inventory = fetchMasterInventory(account),
+                groceries = try { fetchGroceries(account) } catch (_: Exception) { emptyList() },
+                history = try { fetchHistoryLog(account) } catch (_: Exception) { emptyList() },
+                settings = fetchSettings(account)
+            )
+        }
     }
 
     suspend fun fetchMasterInventory(account: GoogleSignInAccount): List<InventoryItem> = withContext(Dispatchers.IO) {
@@ -46,8 +100,10 @@ class GoogleSheetsClient(private val context: Context) {
         val response: ValueRange = service.spreadsheets().values()
             .get(spreadsheetId, "'Master Inventory'!A2:S")
             .execute()
+        parseInventoryRows(response.getValues() ?: emptyList())
+    }
 
-        val rows = response.getValues() ?: return@withContext emptyList()
+    private fun parseInventoryRows(rows: List<List<Any>>): List<InventoryItem> {
         val items = mutableListOf<InventoryItem>()
 
         for (row in rows) {
@@ -99,7 +155,7 @@ class GoogleSheetsClient(private val context: Context) {
                 )
             )
         }
-        items
+        return items
     }
 
     suspend fun upsertInventoryItem(account: GoogleSignInAccount, item: InventoryItem) = withContext(Dispatchers.IO) {
@@ -238,10 +294,11 @@ class GoogleSheetsClient(private val context: Context) {
         val response: ValueRange = service.spreadsheets().values()
             .get(spreadsheetId, "'Groceries'!A2:J")
             .execute()
+        parseGroceryRows(response.getValues() ?: emptyList())
+    }
 
-        val rows = response.getValues() ?: return@withContext emptyList()
+    private fun parseGroceryRows(rows: List<List<Any>>): List<GroceryItem> {
         val items = mutableListOf<GroceryItem>()
-
         for (row in rows) {
             val id = row.getOrNull(0)?.toString()?.trim() ?: continue
             val name = row.getOrNull(1)?.toString()?.trim() ?: continue
@@ -272,7 +329,7 @@ class GoogleSheetsClient(private val context: Context) {
                 )
             )
         }
-        items
+        return items
     }
 
     suspend fun fetchHistoryLog(account: GoogleSignInAccount): List<HistoryLogEntry> = withContext(Dispatchers.IO) {
@@ -280,10 +337,11 @@ class GoogleSheetsClient(private val context: Context) {
         val response: ValueRange = service.spreadsheets().values()
             .get(spreadsheetId, "'History Log'!A2:I")
             .execute()
+        parseHistoryRows(response.getValues() ?: emptyList())
+    }
 
-        val rows = response.getValues() ?: return@withContext emptyList()
+    private fun parseHistoryRows(rows: List<List<Any>>): List<HistoryLogEntry> {
         val entries = mutableListOf<HistoryLogEntry>()
-
         for (row in rows) {
             val timestamp = row.getOrNull(0)?.toString()?.trim() ?: continue
             val action = row.getOrNull(1)?.toString()?.trim() ?: ""
@@ -310,7 +368,7 @@ class GoogleSheetsClient(private val context: Context) {
                 )
             )
         }
-        entries
+        return entries
     }
 
     suspend fun fetchSettings(account: GoogleSignInAccount): AppSettingsEntity = withContext(Dispatchers.IO) {
@@ -319,7 +377,17 @@ class GoogleSheetsClient(private val context: Context) {
             val response: ValueRange = service.spreadsheets().values()
                 .get(spreadsheetId, "'Settings'!A2:B")
                 .execute()
-            val rows = response.getValues() ?: emptyList()
+            return@withContext parseSettingsRows(response.getValues() ?: emptyList(), account.email ?: "")
+        } catch (_: Exception) {}
+
+        AppSettingsEntity(
+            lastSyncedAt = System.currentTimeMillis(),
+            userEmail = account.email ?: ""
+        )
+    }
+
+    private fun parseSettingsRows(rows: List<List<Any>>, email: String): AppSettingsEntity {
+        try {
             var jsonStr = ""
             for (row in rows) {
                 if (row.getOrNull(0)?.toString()?.trim() == "app_settings_json") {
@@ -337,7 +405,7 @@ class GoogleSheetsClient(private val context: Context) {
                 val catsArr = parsed.getAsJsonArray("categories")?.toString() ?: "[]"
                 val locsArr = parsed.getAsJsonArray("locations")?.toString() ?: "[]"
 
-                return@withContext AppSettingsEntity(
+                return AppSettingsEntity(
                     key = "app_settings",
                     householdSize = adults + 3,
                     adults = adults,
@@ -348,14 +416,14 @@ class GoogleSheetsClient(private val context: Context) {
                     lowStockPct = lowStockPct,
                     useSoonDays = useSoonDays,
                     lastSyncedAt = System.currentTimeMillis(),
-                    userEmail = account.email ?: ""
+                    userEmail = email
                 )
             }
         } catch (_: Exception) {}
 
-        AppSettingsEntity(
+        return AppSettingsEntity(
             lastSyncedAt = System.currentTimeMillis(),
-            userEmail = account.email ?: ""
+            userEmail = email
         )
     }
 

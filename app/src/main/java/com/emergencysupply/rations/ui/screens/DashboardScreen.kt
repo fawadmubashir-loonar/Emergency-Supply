@@ -2,6 +2,7 @@ package com.emergencysupply.rations.ui.screens
 
 import android.widget.Toast
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -23,8 +24,6 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.AddShoppingCart
 import androidx.compose.material.icons.filled.CheckCircle
-import androidx.compose.material.icons.filled.HourglassBottom
-import androidx.compose.material.icons.filled.Inventory2
 import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.filled.Remove
 import androidx.compose.material.icons.filled.ShoppingCart
@@ -34,10 +33,8 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LinearProgressIndicator
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -48,6 +45,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
@@ -59,21 +57,19 @@ import com.emergencysupply.rations.data.local.entity.InventoryItem
 import com.emergencysupply.rations.ui.GroupSummary
 import com.emergencysupply.rations.ui.MainViewModel
 import com.emergencysupply.rations.ui.NavTab
-import com.emergencysupply.rations.ui.components.ReadinessArcGauge
 import com.emergencysupply.rations.ui.components.categoryVisualFor
 import com.emergencysupply.rations.ui.theme.BorderSlate
 import com.emergencysupply.rations.ui.theme.CardSurface
+import com.emergencysupply.rations.ui.theme.CobaltBlue
 import com.emergencysupply.rations.ui.theme.DangerRed
 import com.emergencysupply.rations.ui.theme.DangerSoft
 import com.emergencysupply.rations.ui.theme.DarkSlate
-import com.emergencysupply.rations.ui.theme.IndigoAccent
-import com.emergencysupply.rations.ui.theme.IndigoSoft
 import com.emergencysupply.rations.ui.theme.InkBlack
 import com.emergencysupply.rations.ui.theme.LightSlate
 import com.emergencysupply.rations.ui.theme.MediumSlate
 import com.emergencysupply.rations.ui.theme.MidnightSlate
 import com.emergencysupply.rations.ui.theme.OrangeAccent
-import com.emergencysupply.rations.ui.theme.OrangeSoft
+import com.emergencysupply.rations.ui.theme.RoyalBlue
 import com.emergencysupply.rations.ui.theme.SoftTileSurface
 import com.emergencysupply.rations.ui.theme.SuccessGreen
 import com.emergencysupply.rations.ui.theme.SuccessSoft
@@ -81,6 +77,8 @@ import com.emergencysupply.rations.ui.theme.TealPrimary
 import com.emergencysupply.rations.ui.theme.TealSoft
 import com.emergencysupply.rations.ui.theme.WarningAmber
 import com.emergencysupply.rations.ui.theme.WarningSoft
+
+private enum class HomeActionTab { RESTOCK, EXPIRING }
 
 @Composable
 fun DashboardScreen(viewModel: MainViewModel) {
@@ -94,6 +92,7 @@ fun DashboardScreen(viewModel: MainViewModel) {
     val availableCategories by viewModel.availableCategories.collectAsState()
     val availableLocations by viewModel.availableLocations.collectAsState()
 
+    var activeFocusTab by remember { mutableStateOf(HomeActionTab.RESTOCK) }
     var editingItem by remember { mutableStateOf<InventoryItem?>(null) }
     var showAddSheet by remember { mutableStateOf(false) }
 
@@ -103,137 +102,137 @@ fun DashboardScreen(viewModel: MainViewModel) {
             .padding(horizontal = 16.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
-        // 1. Personal Finance Arc Gauge Readiness Card
+        // 1. Vibrant Gradient Readiness Hero Banner (Inspired by AgroPulse & Finance Hero)
         item {
             Card(
-                modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(24.dp),
-                colors = CardDefaults.cardColors(containerColor = CardSurface),
-                elevation = CardDefaults.cardElevation(defaultElevation = 3.dp)
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { viewModel.openFilteredInventory() },
+                shape = RoundedCornerShape(26.dp),
+                elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
             ) {
-                Column(modifier = Modifier.padding(20.dp)) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text(
-                            text = "Pantry Health",
-                            fontSize = 16.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = MidnightSlate
-                        )
-                        Surface(
-                            shape = RoundedCornerShape(10.dp),
-                            color = SoftTileSurface,
-                            border = BorderStroke(1.dp, BorderSlate),
-                            modifier = Modifier.clickable { viewModel.openFilteredInventory() }
-                        ) {
-                            Text(
-                                text = "View All",
-                                fontSize = 11.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = MediumSlate,
-                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
-                            )
-                        }
-                    }
-
-                    ReadinessArcGauge(
-                        scorePct = metrics.parReadinessScore,
-                        daysOfSupply = metrics.estDaysOfSupply
-                    )
-
-                    HorizontalDivider(color = BorderSlate.copy(alpha = 0.5f))
-                    Spacer(modifier = Modifier.height(12.dp))
-
-                    // 3 Mini Metrics below Arc
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceEvenly
-                    ) {
-                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                            Text("Servings", fontSize = 11.sp, color = LightSlate)
-                            Text("%,.0f".format(metrics.totalServings), fontSize = 15.sp, fontWeight = FontWeight.ExtraBold, color = MidnightSlate)
-                        }
-                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                            Text("Household", fontSize = 11.sp, color = LightSlate)
-                            Text("5 People", fontSize = 15.sp, fontWeight = FontWeight.ExtraBold, color = MidnightSlate)
-                        }
-                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                            Text("Unique Items", fontSize = 11.sp, color = LightSlate)
-                            Text("${metrics.totalUniqueItems}", fontSize = 15.sp, fontWeight = FontWeight.ExtraBold, color = TealPrimary)
-                        }
-                    }
-                }
-            }
-        }
-
-        // 2. Finance Quick Action Circles Strip
-        item {
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(22.dp),
-                colors = CardDefaults.cardColors(containerColor = CardSurface),
-                elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
-            ) {
-                Row(
+                Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(vertical = 14.dp, horizontal = 8.dp),
-                    horizontalArrangement = Arrangement.SpaceEvenly
+                        .background(
+                            Brush.linearGradient(
+                                colors = listOf(RoyalBlue, CobaltBlue, TealPrimary)
+                            )
+                        )
+                        .padding(20.dp)
                 ) {
-                    QuickActionCircle(Icons.Default.Add, "Add Item", OrangeAccent, OrangeSoft) {
-                        showAddSheet = true
-                    }
-                    QuickActionCircle(Icons.Default.Warning, "Low Stock", DangerRed, DangerSoft) {
-                        viewModel.openFilteredInventory(lowStockOnly = true)
-                    }
-                    QuickActionCircle(Icons.Default.ShoppingCart, "Groceries", TealPrimary, TealSoft) {
-                        viewModel.currentTab.value = NavTab.GROCERIES
-                    }
-                    QuickActionCircle(Icons.Default.Sync, "Sync Now", IndigoAccent, IndigoSoft) {
-                        viewModel.syncNow()
-                        Toast.makeText(context, "Syncing Google Sheets...", Toast.LENGTH_SHORT).show()
+                    Column(modifier = Modifier.fillMaxWidth()) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Column {
+                                Text(
+                                    text = "HOUSEHOLD SUPPLY",
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = Color.White.copy(alpha = 0.8f),
+                                    letterSpacing = 1.sp
+                                )
+                                Spacer(modifier = Modifier.height(4.dp))
+                                Row(verticalAlignment = Alignment.Bottom) {
+                                    Text(
+                                        text = "${metrics.estDaysOfSupply}",
+                                        fontSize = 42.sp,
+                                        fontWeight = FontWeight.Black,
+                                        color = Color.White,
+                                        lineHeight = 42.sp
+                                    )
+                                    Text(
+                                        text = " Days",
+                                        fontSize = 18.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = Color.White.copy(alpha = 0.9f),
+                                        modifier = Modifier.padding(bottom = 5.dp, start = 4.dp)
+                                    )
+                                }
+                            }
+
+                            Surface(
+                                shape = RoundedCornerShape(14.dp),
+                                color = Color.White.copy(alpha = 0.2f)
+                            ) {
+                                Column(
+                                    horizontalAlignment = Alignment.CenterHorizontally,
+                                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)
+                                ) {
+                                    Text(
+                                        text = "${metrics.parReadinessScore}%",
+                                        fontSize = 20.sp,
+                                        fontWeight = FontWeight.Black,
+                                        color = Color.White
+                                    )
+                                    Text(
+                                        text = "Par Goal",
+                                        fontSize = 10.sp,
+                                        fontWeight = FontWeight.SemiBold,
+                                        color = Color.White.copy(alpha = 0.9f)
+                                    )
+                                }
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(14.dp))
+
+                        val progress = (metrics.parReadinessScore / 100f).coerceIn(0f, 1f)
+                        LinearProgressIndicator(
+                            progress = { progress },
+                            modifier = Modifier.fillMaxWidth().height(7.dp),
+                            color = Color.White,
+                            trackColor = Color.White.copy(alpha = 0.25f)
+                        )
+
+                        Spacer(modifier = Modifier.height(14.dp))
+
+                        // Crisp translucent summary strip
+                        Surface(
+                            shape = RoundedCornerShape(14.dp),
+                            color = Color.White.copy(alpha = 0.14f),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth().padding(vertical = 10.dp),
+                                horizontalArrangement = Arrangement.SpaceEvenly
+                            ) {
+                                HeroMiniStat("%,.0f".format(metrics.totalServings), "Servings")
+                                HeroMiniStat("%,.0f".format(metrics.totalUnitsInStock), "Units")
+                                HeroMiniStat("${metrics.totalUniqueItems}", "Rations")
+                            }
+                        }
                     }
                 }
             }
         }
 
-        // 3. Logistics-Style 3-Column Counter Row
+        // 2. Vibrant Quick Action Tiles (Solid Saturated Colors)
         item {
-            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                CompactCounterTile(
-                    icon = Icons.Default.Inventory2,
-                    tint = TealPrimary,
-                    softBg = TealSoft,
-                    count = "%,.0f".format(metrics.totalUnitsInStock),
-                    label = "Total Units",
-                    onClick = { viewModel.openFilteredInventory() },
-                    modifier = Modifier.weight(1f)
-                )
-                CompactCounterTile(
-                    icon = Icons.Default.HourglassBottom,
-                    tint = OrangeAccent,
-                    softBg = OrangeSoft,
-                    count = "${metrics.expiringSoonCount}",
-                    label = "Expiring Soon",
-                    onClick = { viewModel.openFilteredInventory(expiringOnly = true) },
-                    modifier = Modifier.weight(1f)
-                )
-                CompactCounterTile(
-                    icon = Icons.Default.Warning,
-                    tint = DangerRed,
-                    softBg = DangerSoft,
-                    count = "${metrics.restockNeededCount}",
-                    label = "Low Par",
-                    onClick = { viewModel.openFilteredInventory(lowStockOnly = true) },
-                    modifier = Modifier.weight(1f)
-                )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                QuickSolidActionTile(Icons.Default.Add, "Add Item", OrangeAccent) {
+                    showAddSheet = true
+                }
+                QuickSolidActionTile(Icons.Default.Warning, "Low (${metrics.restockNeededCount})", DangerRed) {
+                    viewModel.openFilteredInventory(lowStockOnly = true)
+                }
+                QuickSolidActionTile(Icons.Default.ShoppingCart, "Shop", SuccessGreen) {
+                    viewModel.currentTab.value = NavTab.GROCERIES
+                }
+                QuickSolidActionTile(Icons.Default.Sync, "Sync", CobaltBlue) {
+                    viewModel.syncNow()
+                    Toast.makeText(context, "Syncing Google Sheets...", Toast.LENGTH_SHORT).show()
+                }
             }
         }
 
-        // 4. Cloud Storage Inspired: Quick Category Folders (1-Tap Jump)
+        // 3. Browse Categories (Colorful Solid Icon Tiles - Cloud Storage Style)
         if (categorySummaries.isNotEmpty()) {
             item {
                 Column {
@@ -242,19 +241,19 @@ fun DashboardScreen(viewModel: MainViewModel) {
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Text("Categories", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = MidnightSlate)
+                        Text("Categories", fontSize = 16.sp, fontWeight = FontWeight.ExtraBold, color = MidnightSlate)
                         Text(
-                            "Browse All >",
+                            "View All >",
                             fontSize = 12.sp,
-                            fontWeight = FontWeight.SemiBold,
-                            color = TealPrimary,
+                            fontWeight = FontWeight.Bold,
+                            color = CobaltBlue,
                             modifier = Modifier.clickable { viewModel.openFilteredInventory() }
                         )
                     }
                     Spacer(modifier = Modifier.height(10.dp))
                     LazyRow(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                         items(categorySummaries, key = { "cat_card_${it.name}" }) { summary ->
-                            CategoryFolderCard(summary) {
+                            VibrantCategoryCard(summary) {
                                 viewModel.openFilteredInventory(category = summary.name)
                             }
                         }
@@ -263,28 +262,35 @@ fun DashboardScreen(viewModel: MainViewModel) {
             }
         }
 
-        // 5. Cloud Storage Breakdown List: Storage Locations Reachability
+        // 4. Storage Zones Jump Pills
         if (locationSummaries.isNotEmpty()) {
             item {
-                Card(
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(22.dp),
-                    colors = CardDefaults.cardColors(containerColor = CardSurface),
-                    elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
-                ) {
-                    Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Text("Storage Spots", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = MidnightSlate)
-                            Text("${locationSummaries.size} zones", fontSize = 11.sp, color = LightSlate)
-                        }
-
-                        locationSummaries.forEach { locSummary ->
-                            LocationBreakdownRow(locSummary) {
-                                viewModel.openFilteredInventory(location = locSummary.name)
+                Column {
+                    Text("Storage Spots", fontSize = 16.sp, fontWeight = FontWeight.ExtraBold, color = MidnightSlate)
+                    Spacer(modifier = Modifier.height(8.dp))
+                    LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        items(locationSummaries, key = { "loc_pill_${it.name}" }) { loc ->
+                            Surface(
+                                shape = RoundedCornerShape(14.dp),
+                                color = CardSurface,
+                                shadowElevation = 2.dp,
+                                modifier = Modifier.clickable { viewModel.openFilteredInventory(location = loc.name) }
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Surface(shape = CircleShape, color = CobaltBlue, modifier = Modifier.size(26.dp)) {
+                                        Box(contentAlignment = Alignment.Center) {
+                                            Icon(Icons.Default.LocationOn, contentDescription = null, tint = Color.White, modifier = Modifier.size(14.dp))
+                                        }
+                                    }
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Column {
+                                        Text(loc.name, fontSize = 12.sp, fontWeight = FontWeight.Bold, color = MidnightSlate)
+                                        Text("${loc.itemCount} items • ${loc.readinessPct}%", fontSize = 10.sp, color = LightSlate)
+                                    }
+                                }
                             }
                         }
                     }
@@ -292,75 +298,80 @@ fun DashboardScreen(viewModel: MainViewModel) {
             }
         }
 
-        // 6. FIFO Priority Use-First Section
+        // 5. Tidy Tabbed Focus Toggle (Keeps Home Clean & Concise!)
         item {
             Row(
                 modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                Column {
-                    Text("Use First (FIFO)", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = MidnightSlate)
-                    Text("Earliest expiring items • Tap to edit", fontSize = 12.sp, color = MediumSlate)
+                val isRestock = activeFocusTab == HomeActionTab.RESTOCK
+                Surface(
+                    shape = RoundedCornerShape(14.dp),
+                    color = if (isRestock) DangerRed else CardSurface,
+                    shadowElevation = if (isRestock) 3.dp else 1.dp,
+                    modifier = Modifier.weight(1f).clickable { activeFocusTab = HomeActionTab.RESTOCK }
+                ) {
+                    Text(
+                        text = "⚠️ Low Stock (${restockItems.size})",
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = if (isRestock) Color.White else DarkSlate,
+                        modifier = Modifier.padding(vertical = 10.dp, horizontal = 12.dp)
+                    )
                 }
-                Surface(shape = RoundedCornerShape(10.dp), color = OrangeSoft) {
-                    Text("${expiringItems.size} items", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = OrangeAccent, modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp))
+
+                val isExp = activeFocusTab == HomeActionTab.EXPIRING
+                Surface(
+                    shape = RoundedCornerShape(14.dp),
+                    color = if (isExp) OrangeAccent else CardSurface,
+                    shadowElevation = if (isExp) 3.dp else 1.dp,
+                    modifier = Modifier.weight(1f).clickable { activeFocusTab = HomeActionTab.EXPIRING }
+                ) {
+                    Text(
+                        text = "⏳ Expiring (${expiringItems.size})",
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = if (isExp) Color.White else DarkSlate,
+                        modifier = Modifier.padding(vertical = 10.dp, horizontal = 12.dp)
+                    )
                 }
             }
         }
 
-        if (expiringItems.isEmpty()) {
-            item {
-                EmptyStatusCard("All expiration dates are healthy!")
+        // 6. Active Focus List
+        if (activeFocusTab == HomeActionTab.RESTOCK) {
+            if (restockItems.isEmpty()) {
+                item { EmptyStatusCard("All rations meet target par!") }
+            } else {
+                items(restockItems, key = { "restock_${it.id}" }) { item ->
+                    ReformedRestockCard(
+                        item = item,
+                        onCardClick = { editingItem = item },
+                        onQuickRestock = {
+                            viewModel.restockItem(item.id, 1.0)
+                            Toast.makeText(context, "+1 ${item.name} synced", Toast.LENGTH_SHORT).show()
+                        },
+                        onAddToGroceries = {
+                            viewModel.addRestockItemToGroceries(item)
+                            Toast.makeText(context, "Added ${item.name} to Groceries", Toast.LENGTH_SHORT).show()
+                        }
+                    )
+                }
             }
         } else {
-            items(expiringItems, key = { "fifo_${it.id}" }) { item ->
-                ReformedFifoCard(
-                    item = item,
-                    onCardClick = { editingItem = item },
-                    onUseOne = {
-                        viewModel.useItem(item.id, 1.0)
-                        Toast.makeText(context, "Used 1 ${item.name}", Toast.LENGTH_SHORT).show()
-                    }
-                )
-            }
-        }
-
-        // 7. Restock Alerts Section
-        item {
-            Row(
-                modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Column {
-                    Text("Restock Alerts", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = MidnightSlate)
-                    Text("Below target par • Tap +1 or Groceries", fontSize = 12.sp, color = MediumSlate)
+            if (expiringItems.isEmpty()) {
+                item { EmptyStatusCard("All expiration dates are healthy!") }
+            } else {
+                items(expiringItems, key = { "fifo_${it.id}" }) { item ->
+                    ReformedFifoCard(
+                        item = item,
+                        onCardClick = { editingItem = item },
+                        onUseOne = {
+                            viewModel.useItem(item.id, 1.0)
+                            Toast.makeText(context, "Used 1 ${item.name}", Toast.LENGTH_SHORT).show()
+                        }
+                    )
                 }
-                Surface(shape = RoundedCornerShape(10.dp), color = if (restockItems.isNotEmpty()) DangerSoft else SuccessSoft) {
-                    Text("${restockItems.size} alerts", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = if (restockItems.isNotEmpty()) DangerRed else SuccessGreen, modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp))
-                }
-            }
-        }
-
-        if (restockItems.isEmpty()) {
-            item {
-                EmptyStatusCard("All rations meet target par!")
-            }
-        } else {
-            items(restockItems, key = { "restock_${it.id}" }) { item ->
-                ReformedRestockCard(
-                    item = item,
-                    onCardClick = { editingItem = item },
-                    onQuickRestock = {
-                        viewModel.restockItem(item.id, 1.0)
-                        Toast.makeText(context, "+1 ${item.name} synced to Sheet", Toast.LENGTH_SHORT).show()
-                    },
-                    onAddToGroceries = {
-                        viewModel.addRestockItemToGroceries(item)
-                        Toast.makeText(context, "Added ${item.name} to Groceries", Toast.LENGTH_SHORT).show()
-                    }
-                )
             }
         }
 
@@ -416,11 +427,18 @@ fun DashboardScreen(viewModel: MainViewModel) {
 }
 
 @Composable
-private fun QuickActionCircle(
+private fun HeroMiniStat(value: String, label: String) {
+    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+        Text(value, fontSize = 16.sp, fontWeight = FontWeight.Black, color = Color.White)
+        Text(label, fontSize = 11.sp, color = Color.White.copy(alpha = 0.8f))
+    }
+}
+
+@Composable
+private fun QuickSolidActionTile(
     icon: ImageVector,
     label: String,
-    tint: Color,
-    softBg: Color,
+    bgColor: Color,
     onClick: () -> Unit
 ) {
     Column(
@@ -429,60 +447,29 @@ private fun QuickActionCircle(
     ) {
         Surface(
             shape = RoundedCornerShape(16.dp),
-            color = softBg,
-            modifier = Modifier.size(48.dp)
+            color = bgColor,
+            shadowElevation = 4.dp,
+            modifier = Modifier.size(52.dp)
         ) {
             Box(contentAlignment = Alignment.Center) {
-                Icon(imageVector = icon, contentDescription = label, tint = tint, modifier = Modifier.size(22.dp))
+                Icon(imageVector = icon, contentDescription = label, tint = Color.White, modifier = Modifier.size(24.dp))
             }
         }
         Spacer(modifier = Modifier.height(6.dp))
-        Text(text = label, fontSize = 11.sp, fontWeight = FontWeight.SemiBold, color = DarkSlate)
+        Text(text = label, fontSize = 11.sp, fontWeight = FontWeight.Bold, color = DarkSlate)
     }
 }
 
 @Composable
-private fun CompactCounterTile(
-    icon: ImageVector,
-    tint: Color,
-    softBg: Color,
-    count: String,
-    label: String,
-    onClick: () -> Unit,
-    modifier: Modifier = Modifier
-) {
-    Card(
-        modifier = modifier.clickable(onClick = onClick),
-        shape = RoundedCornerShape(18.dp),
-        colors = CardDefaults.cardColors(containerColor = CardSurface),
-        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
-    ) {
-        Column(
-            modifier = Modifier.padding(14.dp),
-            horizontalAlignment = Alignment.Start
-        ) {
-            Surface(shape = CircleShape, color = softBg, modifier = Modifier.size(34.dp)) {
-                Box(contentAlignment = Alignment.Center) {
-                    Icon(imageVector = icon, contentDescription = null, tint = tint, modifier = Modifier.size(18.dp))
-                }
-            }
-            Spacer(modifier = Modifier.height(10.dp))
-            Text(text = count, fontSize = 22.sp, fontWeight = FontWeight.Black, color = MidnightSlate)
-            Text(text = label, fontSize = 11.sp, fontWeight = FontWeight.Medium, color = MediumSlate)
-        }
-    }
-}
-
-@Composable
-private fun CategoryFolderCard(summary: GroupSummary, onClick: () -> Unit) {
+private fun VibrantCategoryCard(summary: GroupSummary, onClick: () -> Unit) {
     val visual = categoryVisualFor(summary.name)
     Card(
         modifier = Modifier
-            .width(136.dp)
+            .width(142.dp)
             .clickable(onClick = onClick),
         shape = RoundedCornerShape(20.dp),
         colors = CardDefaults.cardColors(containerColor = CardSurface),
-        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+        elevation = CardDefaults.cardElevation(defaultElevation = 3.dp)
     ) {
         Column(modifier = Modifier.padding(14.dp)) {
             Row(
@@ -490,19 +477,19 @@ private fun CategoryFolderCard(summary: GroupSummary, onClick: () -> Unit) {
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Surface(shape = CircleShape, color = visual.softBg, modifier = Modifier.size(36.dp)) {
+                Surface(shape = RoundedCornerShape(12.dp), color = visual.tint, modifier = Modifier.size(38.dp)) {
                     Box(contentAlignment = Alignment.Center) {
-                        Text(PreplannedCatalog.iconForCategory(summary.name), fontSize = 16.sp)
+                        Text(PreplannedCatalog.iconForCategory(summary.name), fontSize = 18.sp)
                     }
                 }
                 if (summary.lowStockCount > 0) {
-                    Surface(shape = RoundedCornerShape(8.dp), color = DangerSoft) {
+                    Surface(shape = RoundedCornerShape(8.dp), color = DangerRed) {
                         Text(
                             text = "${summary.lowStockCount} low",
                             fontSize = 9.sp,
                             fontWeight = FontWeight.Bold,
-                            color = DangerRed,
-                            modifier = Modifier.padding(horizontal = 5.dp, vertical = 2.dp)
+                            color = Color.White,
+                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
                         )
                     }
                 }
@@ -516,42 +503,15 @@ private fun CategoryFolderCard(summary: GroupSummary, onClick: () -> Unit) {
                 maxLines = 1
             )
             Text(
-                text = "${summary.itemCount} items • ${summary.readinessPct}%",
+                text = "${summary.itemCount} items",
                 fontSize = 11.sp,
                 color = LightSlate
             )
-        }
-    }
-}
-
-@Composable
-private fun LocationBreakdownRow(summary: GroupSummary, onClick: () -> Unit) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable(onClick = onClick),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Surface(shape = RoundedCornerShape(12.dp), color = TealSoft, modifier = Modifier.size(38.dp)) {
-            Box(contentAlignment = Alignment.Center) {
-                Icon(Icons.Default.LocationOn, contentDescription = null, tint = TealPrimary, modifier = Modifier.size(18.dp))
-            }
-        }
-        Spacer(modifier = Modifier.width(12.dp))
-        Column(modifier = Modifier.weight(1f)) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween
-            ) {
-                Text(summary.name, fontSize = 13.sp, fontWeight = FontWeight.Bold, color = MidnightSlate)
-                Text("${summary.itemCount} items", fontSize = 11.sp, color = LightSlate)
-            }
-            Spacer(modifier = Modifier.height(5.dp))
-            val pctFloat = (summary.readinessPct / 100f).coerceIn(0f, 1f)
+            Spacer(modifier = Modifier.height(6.dp))
             LinearProgressIndicator(
-                progress = { pctFloat },
-                modifier = Modifier.fillMaxWidth().height(5.dp),
-                color = if (summary.readinessPct < 50) OrangeAccent else TealPrimary,
+                progress = { (summary.readinessPct / 100f).coerceIn(0f, 1f) },
+                modifier = Modifier.fillMaxWidth().height(4.dp),
+                color = visual.tint,
                 trackColor = Color(0xFFF1F5F9)
             )
         }
@@ -561,7 +521,7 @@ private fun LocationBreakdownRow(summary: GroupSummary, onClick: () -> Unit) {
 @Composable
 private fun EmptyStatusCard(message: String) {
     Surface(
-        shape = RoundedCornerShape(16.dp),
+        shape = RoundedCornerShape(18.dp),
         color = CardSurface,
         shadowElevation = 1.dp,
         modifier = Modifier.fillMaxWidth()
@@ -569,7 +529,7 @@ private fun EmptyStatusCard(message: String) {
         Row(modifier = Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
             Icon(Icons.Default.CheckCircle, contentDescription = null, tint = SuccessGreen, modifier = Modifier.size(22.dp))
             Spacer(modifier = Modifier.width(10.dp))
-            Text(message, fontSize = 13.sp, fontWeight = FontWeight.Medium, color = DarkSlate)
+            Text(message, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = DarkSlate)
         }
     }
 }
@@ -593,37 +553,36 @@ fun ReformedFifoCard(
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
             Row(modifier = Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically) {
-                Surface(shape = CircleShape, color = visual.softBg, modifier = Modifier.size(38.dp)) {
+                Surface(shape = RoundedCornerShape(12.dp), color = visual.tint, modifier = Modifier.size(40.dp)) {
                     Box(contentAlignment = Alignment.Center) {
-                        Text(PreplannedCatalog.iconForCategory(item.category), fontSize = 16.sp)
+                        Text(PreplannedCatalog.iconForItem(item.name, item.category), fontSize = 18.sp)
                     }
                 }
-                Spacer(modifier = Modifier.width(10.dp))
+                Spacer(modifier = Modifier.width(12.dp))
                 Column {
                     Text(item.name, fontWeight = FontWeight.Bold, fontSize = 14.sp, color = MidnightSlate)
-                    Spacer(modifier = Modifier.height(2.dp))
+                    Spacer(modifier = Modifier.height(3.dp))
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        val expBg = if (item.isExpired) DangerSoft else if (item.isExpiringSoon) WarningSoft else SuccessSoft
-                        val expFg = if (item.isExpired) DangerRed else if (item.isExpiringSoon) WarningAmber else SuccessGreen
+                        val expBg = if (item.isExpired) DangerRed else if (item.isExpiringSoon) OrangeAccent else SuccessGreen
                         Surface(shape = RoundedCornerShape(6.dp), color = expBg) {
                             Text(
                                 text = if (item.isExpired) "EXPIRED" else "Exp: ${item.earliestExpiry ?: "N/A"}",
                                 fontSize = 10.sp,
                                 fontWeight = FontWeight.Bold,
-                                color = expFg,
+                                color = Color.White,
                                 modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
                             )
                         }
                         if (item.location.isNotEmpty()) {
                             Spacer(modifier = Modifier.width(6.dp))
-                            Text("📍 ${item.location}", fontSize = 10.sp, color = LightSlate)
+                            Text("📍 ${item.location}", fontSize = 10.sp, color = MediumSlate)
                         }
                     }
                 }
             }
 
             Surface(
-                shape = RoundedCornerShape(12.dp),
+                shape = RoundedCornerShape(10.dp),
                 color = SoftTileSurface,
                 border = BorderStroke(1.dp, BorderSlate),
                 modifier = Modifier.clickable(onClick = onUseOne)
@@ -661,21 +620,21 @@ fun ReformedRestockCard(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Row(modifier = Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically) {
-                    Surface(shape = CircleShape, color = visual.softBg, modifier = Modifier.size(34.dp)) {
+                    Surface(shape = RoundedCornerShape(12.dp), color = visual.tint, modifier = Modifier.size(38.dp)) {
                         Box(contentAlignment = Alignment.Center) {
-                            Text(PreplannedCatalog.iconForCategory(item.category), fontSize = 15.sp)
+                            Text(PreplannedCatalog.iconForItem(item.name, item.category), fontSize = 18.sp)
                         }
                     }
                     Spacer(modifier = Modifier.width(10.dp))
                     Text(item.name, fontSize = 15.sp, fontWeight = FontWeight.Bold, color = MidnightSlate)
                 }
 
-                Surface(shape = RoundedCornerShape(8.dp), color = DangerSoft) {
+                Surface(shape = RoundedCornerShape(8.dp), color = DangerRed) {
                     Text(
                         text = "Need +%.0f %s".format(deficit, item.unit),
                         fontSize = 10.sp,
                         fontWeight = FontWeight.Bold,
-                        color = DangerRed,
+                        color = Color.White,
                         modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
                     )
                 }
@@ -688,7 +647,7 @@ fun ReformedRestockCard(
             LinearProgressIndicator(
                 progress = { parProgress },
                 modifier = Modifier.fillMaxWidth().height(6.dp),
-                color = OrangeAccent,
+                color = visual.tint,
                 trackColor = Color(0xFFF1F5F9)
             )
 
@@ -703,31 +662,31 @@ fun ReformedRestockCard(
                     text = "%.0f / %.0f %s".format(item.currentQty, item.parLevel, item.unit),
                     fontSize = 12.sp,
                     color = MediumSlate,
-                    fontWeight = FontWeight.SemiBold
+                    fontWeight = FontWeight.Bold
                 )
 
                 Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     Surface(
                         shape = RoundedCornerShape(10.dp),
-                        color = TealSoft,
+                        color = SuccessGreen,
                         modifier = Modifier.clickable(onClick = onQuickRestock)
                     ) {
                         Row(modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
-                            Icon(Icons.Default.Add, contentDescription = "Restock +1", modifier = Modifier.size(14.dp), tint = TealPrimary)
+                            Icon(Icons.Default.Add, contentDescription = "Restock +1", modifier = Modifier.size(14.dp), tint = Color.White)
                             Spacer(modifier = Modifier.width(2.dp))
-                            Text("+1", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = TealPrimary)
+                            Text("+1", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = Color.White)
                         }
                     }
 
                     Button(
                         onClick = onAddToGroceries,
                         shape = RoundedCornerShape(10.dp),
-                        colors = ButtonDefaults.buttonColors(containerColor = InkBlack),
+                        colors = ButtonDefaults.buttonColors(containerColor = CobaltBlue),
                         modifier = Modifier.height(32.dp)
                     ) {
                         Icon(Icons.Default.AddShoppingCart, contentDescription = null, modifier = Modifier.size(13.dp))
                         Spacer(modifier = Modifier.width(4.dp))
-                        Text("Groceries", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                        Text("Shop", fontSize = 11.sp, fontWeight = FontWeight.Bold)
                     }
                 }
             }

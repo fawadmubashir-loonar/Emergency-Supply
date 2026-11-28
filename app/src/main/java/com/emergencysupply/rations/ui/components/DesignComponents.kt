@@ -56,6 +56,8 @@ import androidx.compose.ui.unit.sp
 import com.emergencysupply.rations.ui.NavTab
 import com.emergencysupply.rations.ui.theme.BorderSlate
 import com.emergencysupply.rations.ui.theme.CardSurface
+import com.emergencysupply.rations.ui.theme.CobaltBlue
+import com.emergencysupply.rations.ui.theme.CobaltSoft
 import com.emergencysupply.rations.ui.theme.DangerRed
 import com.emergencysupply.rations.ui.theme.DangerSoft
 import com.emergencysupply.rations.ui.theme.IndigoAccent
@@ -69,6 +71,8 @@ import com.emergencysupply.rations.ui.theme.MidnightSlate
 import com.emergencysupply.rations.ui.theme.MutedSlate
 import com.emergencysupply.rations.ui.theme.OrangeAccent
 import com.emergencysupply.rations.ui.theme.OrangeSoft
+import com.emergencysupply.rations.ui.theme.PinkAccent
+import com.emergencysupply.rations.ui.theme.PinkSoft
 import com.emergencysupply.rations.ui.theme.PurpleAccent
 import com.emergencysupply.rations.ui.theme.PurpleSoft
 import com.emergencysupply.rations.ui.theme.SoftTileSurface
@@ -92,21 +96,27 @@ fun categoryVisualFor(category: String): CategoryVisual {
     val lower = category.lowercase()
     return when {
         lower.contains("grain") || lower.contains("rice") || lower.contains("pasta") || lower.contains("flour") ->
-            CategoryVisual(WarningAmber, WarningSoft)
-        lower.contains("protein") || lower.contains("meat") || lower.contains("halal") || lower.contains("lentil") ->
-            CategoryVisual(DangerRed, DangerSoft)
+            CategoryVisual(WarningAmber, WarningAmber)
+        lower.contains("halal") || lower.contains("meat") || lower.contains("freezer") ->
+            CategoryVisual(DangerRed, DangerRed)
+        lower.contains("protein") || lower.contains("lentil") ->
+            CategoryVisual(OrangeAccent, OrangeAccent)
         lower.contains("can") || lower.contains("produce") ->
-            CategoryVisual(SuccessGreen, SuccessSoft)
-        lower.contains("baby") || lower.contains("kid") || lower.contains("dairy") || lower.contains("milk") ->
-            CategoryVisual(PurpleAccent, PurpleSoft)
+            CategoryVisual(SuccessGreen, SuccessGreen)
+        lower.contains("baby") || lower.contains("kid") ->
+            CategoryVisual(PurpleAccent, PurpleAccent)
+        lower.contains("dairy") || lower.contains("milk") || lower.contains("breakfast") ->
+            CategoryVisual(IndigoAccent, IndigoAccent)
         lower.contains("water") || lower.contains("drink") ->
-            CategoryVisual(InfoBlue, InfoSoft)
+            CategoryVisual(CobaltBlue, CobaltBlue)
         lower.contains("oil") || lower.contains("spice") || lower.contains("ghee") ->
-            CategoryVisual(TealPrimary, TealSoft)
+            CategoryVisual(TealPrimary, TealPrimary)
+        lower.contains("snack") || lower.contains("bakery") || lower.contains("bar") ->
+            CategoryVisual(OrangeAccent, OrangeAccent)
         lower.contains("essential") || lower.contains("aid") || lower.contains("med") ->
-            CategoryVisual(OrangeAccent, OrangeSoft)
+            CategoryVisual(PinkAccent, PinkAccent)
         else ->
-            CategoryVisual(IndigoAccent, IndigoSoft)
+            CategoryVisual(CobaltBlue, CobaltBlue)
     }
 }
 
@@ -510,7 +520,6 @@ fun FloatingCapsuleBottomBar(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 CapsuleNavItem(
-                    tab = NavTab.DASHBOARD,
                     icon = Icons.Default.Dashboard,
                     label = "Home",
                     selected = currentTab == NavTab.DASHBOARD,
@@ -519,7 +528,6 @@ fun FloatingCapsuleBottomBar(
                     onClick = { onSelectTab(NavTab.DASHBOARD) }
                 )
                 CapsuleNavItem(
-                    tab = NavTab.INVENTORY,
                     icon = Icons.Default.Inventory2,
                     label = "Pantry",
                     selected = currentTab == NavTab.INVENTORY,
@@ -528,7 +536,6 @@ fun FloatingCapsuleBottomBar(
                     onClick = { onSelectTab(NavTab.INVENTORY) }
                 )
                 CapsuleNavItem(
-                    tab = NavTab.GROCERIES,
                     icon = Icons.Default.ShoppingCart,
                     label = "Shop",
                     selected = currentTab == NavTab.GROCERIES,
@@ -537,7 +544,6 @@ fun FloatingCapsuleBottomBar(
                     onClick = { onSelectTab(NavTab.GROCERIES) }
                 )
                 CapsuleNavItem(
-                    tab = NavTab.SETTINGS,
                     icon = Icons.Default.Settings,
                     label = "Settings",
                     selected = currentTab == NavTab.SETTINGS,
@@ -552,7 +558,6 @@ fun FloatingCapsuleBottomBar(
 
 @Composable
 private fun CapsuleNavItem(
-    tab: NavTab,
     icon: androidx.compose.ui.graphics.vector.ImageVector,
     label: String,
     selected: Boolean,

@@ -401,75 +401,24 @@ class RationsRepository(
         syncMutex.withLock {
             _syncState.value = SyncState.Syncing
             try {
-                // 1. Process pending local actions first
-                val pendingActions = syncDao.getAllPendingActions()
-                if (pendingActions.isNotEmpty()) {
-                    // Grocery actions
-                    val groceryActionTypes = setOf("ADD_GROCERY", "TOGGLE_GROCERY", "DELETE_GROCERY", "CLEAR_GROCERIES")
-                    val groceryActions = pendingActions.filter { it.actionType in groceryActionTypes }
-                    if (groceryActions.isNotEmpty()) {
-                        val localGroceries = groceryDao.getAllGroceriesOnce()
-                        sheetsClient.rewriteGroceriesTab(account, localGroceries)
-                        for (item in localGroceries) {
-                            if (item.syncPending) {
-                                groceryDao.update(item.copy(syncPending = false))
-                            }
-                        }
-                        for (action in groceryActions) {
-                            syncDao.deleteAction(action.id)
-                        }
-                    }
+                // 1. Flush any local pending writes first
+                pushPendingActionsLocked(account)
 
-                    // Inventory actions
-                    val inventoryActionTypes = setOf("USE_ITEM", "RESTOCK_ITEM", "ADD_ITEM", "UPDATE_ITEM", "DELETE_ITEM")
-                    val inventoryActions = pendingActions.filter { it.actionType in inventoryActionTypes }
-                    for (action in inventoryActions) {
-                        if (action.actionType == "DELETE_ITEM") {
-                            sheetsClient.deleteInventoryRow(account, action.targetId)
-                        } else {
-                            val item = inventoryDao.getItemById(action.targetId)
-                            if (item != null) {
-                                sheetsClient.upsertInventoryItem(account, item)
-                                inventoryDao.updateItem(item.copy(syncPending = false))
-                            }
-                        }
-                        // Also push any unsynced history entries
-                        val pendingHistory = historyDao.getPendingEntries()
-                        for (entry in pendingHistory) {
-                            sheetsClient.appendHistoryEntry(account, entry)
-                            historyDao.markSynced(entry.id)
-                        }
-                        syncDao.deleteAction(action.id)
-                    }
-                }
-
-                // Push any remaining unsynced history entries if any
-                val remainingHistory = historyDao.getPendingEntries()
-                for (entry in remainingHistory) {
-                    sheetsClient.appendHistoryEntry(account, entry)
-                    historyDao.markSynced(entry.id)
-                }
-
-                // 2. Fetch remote data and persist into Room cleanly
-                // Only overwrite groceries/inventory when pending actions have been flushed cleanly!
+                // 2. Single-request batchGet for all 4 sheets (fast ~1s pull!)
                 val remainingPending = syncDao.getPendingCount()
                 if (remainingPending == 0) {
-                    val remoteInventory = sheetsClient.fetchMasterInventory(account)
-                    val remoteGroceries = sheetsClient.fetchGroceries(account)
-                    val remoteHistory = sheetsClient.fetchHistoryLog(account)
-                    val remoteSettings = sheetsClient.fetchSettings(account)
-
-                    if (remoteInventory.isNotEmpty()) {
-                        inventoryDao.insertAll(remoteInventory)
+                    val snapshot = sheetsClient.fetchAllSheetsBatch(account)
+                    if (snapshot.inventory.isNotEmpty()) {
+                        inventoryDao.insertAll(snapshot.inventory)
                     }
                     groceryDao.clearAll()
-                    if (remoteGroceries.isNotEmpty()) {
-                        groceryDao.insertAll(remoteGroceries)
+                    if (snapshot.groceries.isNotEmpty()) {
+                        groceryDao.insertAll(snapshot.groceries)
                     }
-                    if (remoteHistory.isNotEmpty()) {
-                        historyDao.insertAll(remoteHistory)
+                    if (snapshot.history.isNotEmpty()) {
+                        historyDao.insertAll(snapshot.history)
                     }
-                    settingsDao.saveSettings(remoteSettings)
+                    settingsDao.saveSettings(snapshot.settings)
                 }
 
                 _syncState.value = SyncState.Success("Synced with Google Sheet", System.currentTimeMillis())
@@ -479,14 +428,59 @@ class RationsRepository(
         }
     }
 
+    private suspend fun pushPendingActionsLocked(account: GoogleSignInAccount) {
+        val pendingActions = syncDao.getAllPendingActions()
+        if (pendingActions.isNotEmpty()) {
+            val groceryActionTypes = setOf("ADD_GROCERY", "TOGGLE_GROCERY", "DELETE_GROCERY", "CLEAR_GROCERIES")
+            val groceryActions = pendingActions.filter { it.actionType in groceryActionTypes }
+            if (groceryActions.isNotEmpty()) {
+                val localGroceries = groceryDao.getAllGroceriesOnce()
+                sheetsClient.rewriteGroceriesTab(account, localGroceries)
+                for (item in localGroceries) {
+                    if (item.syncPending) {
+                        groceryDao.update(item.copy(syncPending = false))
+                    }
+                }
+                for (action in groceryActions) {
+                    syncDao.deleteAction(action.id)
+                }
+            }
+
+            val inventoryActionTypes = setOf("USE_ITEM", "RESTOCK_ITEM", "ADD_ITEM", "UPDATE_ITEM", "DELETE_ITEM")
+            val inventoryActions = pendingActions.filter { it.actionType in inventoryActionTypes }
+            val processedTargets = mutableSetOf<String>()
+            for (action in inventoryActions) {
+                if (action.actionType == "DELETE_ITEM") {
+                    sheetsClient.deleteInventoryRow(account, action.targetId)
+                } else if (processedTargets.add(action.targetId)) {
+                    val item = inventoryDao.getItemById(action.targetId)
+                    if (item != null) {
+                        sheetsClient.upsertInventoryItem(account, item)
+                        inventoryDao.updateItem(item.copy(syncPending = false))
+                    }
+                }
+                syncDao.deleteAction(action.id)
+            }
+        }
+
+        val remainingHistory = historyDao.getPendingEntries()
+        for (entry in remainingHistory) {
+            sheetsClient.appendHistoryEntry(account, entry)
+            historyDao.markSynced(entry.id)
+        }
+    }
+
     private fun triggerBackgroundSync(account: GoogleSignInAccount) {
         externalScope.launch(Dispatchers.IO) {
-            try {
-                val pending = syncDao.getAllPendingActions()
-                if (pending.isNotEmpty()) {
-                    syncWithGoogleSheets(account)
-                }
-            } catch (_: Exception) {}
+            syncMutex.withLock {
+                try {
+                    val pending = syncDao.getAllPendingActions()
+                    if (pending.isNotEmpty()) {
+                        pushPendingActionsLocked(account)
+                        _syncState.value = SyncState.Success("Saved to Google Sheet", System.currentTimeMillis())
+                    }
+                } catch (_: Exception) {}
+            }
         }
     }
 }
