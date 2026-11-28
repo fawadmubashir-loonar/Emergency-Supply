@@ -2,8 +2,10 @@ package com.emergencysupply.rations.ui.screens
 
 import android.widget.Toast
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -46,7 +48,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -57,6 +61,7 @@ import com.emergencysupply.rations.ui.MainViewModel
 import com.emergencysupply.rations.ui.NavTab
 import com.emergencysupply.rations.ui.components.categoryVisualFor
 import com.emergencysupply.rations.ui.components.dashedBorder
+import com.emergencysupply.rations.ui.components.locationVisualFor
 import com.emergencysupply.rations.ui.theme.BorderSlate
 import com.emergencysupply.rations.ui.theme.CardSurface
 import com.emergencysupply.rations.ui.theme.CobaltBlue
@@ -81,9 +86,11 @@ import com.emergencysupply.rations.ui.theme.WarningSoft
 
 private enum class HomeActionTab { RESTOCK, EXPIRING }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun DashboardScreen(viewModel: MainViewModel) {
     val context = LocalContext.current
+    val haptic = LocalHapticFeedback.current
     val metrics by viewModel.dashboardMetrics.collectAsState()
     val expiringItems by viewModel.earliestExpiring.collectAsState()
     val restockItems by viewModel.restockNeeded.collectAsState()
@@ -413,7 +420,13 @@ fun DashboardScreen(viewModel: MainViewModel) {
                             color = if (isExpired) DangerRed else OrangeAccent,
                             cornerRadius = 16.dp
                         )
-                        .clickable { editingItem = firstCritical },
+                        .combinedClickable(
+                            onClick = { editingItem = firstCritical },
+                            onLongClick = {
+                                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                editingItem = firstCritical
+                            }
+                        ),
                     shape = RoundedCornerShape(16.dp),
                     colors = CardDefaults.cardColors(
                         containerColor = if (isExpired) DangerSoft else PeachSoft
@@ -799,15 +812,26 @@ private fun EmptyStatusCard(message: String) {
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun ReformedFifoCard(
     item: InventoryItem,
     onCardClick: () -> Unit,
     onUseOne: () -> Unit
 ) {
+    val haptic = LocalHapticFeedback.current
     val visual = categoryVisualFor(item.category)
+    val locVisual = locationVisualFor(item.location)
     Card(
-        modifier = Modifier.fillMaxWidth().clickable(onClick = onCardClick),
+        modifier = Modifier
+            .fillMaxWidth()
+            .combinedClickable(
+                onClick = onCardClick,
+                onLongClick = {
+                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                    onCardClick()
+                }
+            ),
         shape = RoundedCornerShape(18.dp),
         colors = CardDefaults.cardColors(containerColor = CardSurface),
         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
@@ -840,7 +864,15 @@ fun ReformedFifoCard(
                         }
                         if (item.location.isNotEmpty()) {
                             Spacer(modifier = Modifier.width(6.dp))
-                            Text("📍 ${item.location}", fontSize = 10.sp, color = MediumSlate)
+                            Surface(shape = RoundedCornerShape(6.dp), color = locVisual.softBg) {
+                                Text(
+                                    text = "📍 ${item.location}",
+                                    fontSize = 10.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = locVisual.tint,
+                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                )
+                            }
                         }
                     }
                 }
@@ -862,6 +894,7 @@ fun ReformedFifoCard(
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun ReformedRestockCard(
     item: InventoryItem,
@@ -869,11 +902,20 @@ fun ReformedRestockCard(
     onQuickRestock: () -> Unit,
     onAddToGroceries: () -> Unit
 ) {
+    val haptic = LocalHapticFeedback.current
     val deficit = if (item.parLevel > item.currentQty) (item.parLevel - item.currentQty) else 1.0
     val visual = categoryVisualFor(item.category)
 
     Card(
-        modifier = Modifier.fillMaxWidth().clickable(onClick = onCardClick),
+        modifier = Modifier
+            .fillMaxWidth()
+            .combinedClickable(
+                onClick = onCardClick,
+                onLongClick = {
+                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                    onCardClick()
+                }
+            ),
         shape = RoundedCornerShape(18.dp),
         colors = CardDefaults.cardColors(containerColor = CardSurface),
         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)

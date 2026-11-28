@@ -372,6 +372,24 @@ class RationsRepository(
         }
     }
 
+    suspend fun updateGroceryItem(item: GroceryItem, account: GoogleSignInAccount?) {
+        val updated = item.copy(
+            updatedAt = dateFormat.format(Date()),
+            syncPending = true
+        )
+        groceryDao.update(updated)
+        syncDao.insertAction(
+            PendingSyncAction(
+                actionType = "UPDATE_GROCERY",
+                targetId = updated.id,
+                payloadJson = "{\"name\": \"${updated.name}\"}"
+            )
+        )
+        if (account != null) {
+            triggerBackgroundSync(account)
+        }
+    }
+
     suspend fun deleteGrocery(id: String, account: GoogleSignInAccount?) {
         groceryDao.deleteById(id)
         syncDao.insertAction(
@@ -592,7 +610,7 @@ class RationsRepository(
     private suspend fun pushPendingActionsLocked(account: GoogleSignInAccount) {
         val pendingActions = syncDao.getAllPendingActions()
         if (pendingActions.isNotEmpty()) {
-            val groceryActionTypes = setOf("ADD_GROCERY", "TOGGLE_GROCERY", "DELETE_GROCERY", "CLEAR_GROCERIES")
+            val groceryActionTypes = setOf("ADD_GROCERY", "UPDATE_GROCERY", "TOGGLE_GROCERY", "DELETE_GROCERY", "CLEAR_GROCERIES")
             val groceryActions = pendingActions.filter { it.actionType in groceryActionTypes }
             if (groceryActions.isNotEmpty()) {
                 val localGroceries = groceryDao.getAllGroceriesOnce()

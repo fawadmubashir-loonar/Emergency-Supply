@@ -452,6 +452,12 @@ class MainViewModel(
         }
     }
 
+    fun updateGroceryItem(item: GroceryItem) {
+        viewModelScope.launch {
+            repository.updateGroceryItem(item, currentAccount.value)
+        }
+    }
+
     fun deleteGrocery(id: String) {
         viewModelScope.launch {
             repository.deleteGrocery(id, currentAccount.value)

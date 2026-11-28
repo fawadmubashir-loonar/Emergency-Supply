@@ -4,6 +4,15 @@ A native Android application built with **Kotlin**, **Jetpack Compose**, and **M
 
 ---
 
+## ✨ What's New in v1.7.0
+
+- **🎡 Rotating Drum-Wheel Edit Settings**: Redesigned item editing & custom-add sheets using vertical snap-wheel pickers for Categories, Storage Spots, Quantities, Par Goals, Units, and Month/Day/Year expiration dates (plus an optional `Type Exact` toggle).
+- **👆 Hold-to-Edit Anywhere**: Long-press any item card on Home, Pantry, or Groceries (with haptic feedback) to jump straight into editing—including a dedicated `GroceryItemEditorSheet` with two-way Sheets sync.
+- **📍 Color-Grouped Locations Inside Pantry Categories**: Items inside each Pantry category automatically group under color-coded Storage Spot headers (`locationVisualFor`).
+- **🍓 Refined Food & Essential Icons**: Specific, accurate emoji matching across produce, berries, meats, dairy, bakery, and household items.
+
+---
+
 ## ✨ What's New in v1.6.0
 
 - **🎨 Budgetly & Wonder Bites Visual Polish**: Warm off-white & peach/emerald palette, high-contrast black capsule action pills, dashed insight/alert cards, and 100%-ready emerald goal gradients.

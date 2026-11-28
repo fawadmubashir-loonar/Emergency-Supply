@@ -40,6 +40,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
@@ -54,6 +55,7 @@ import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -64,6 +66,7 @@ import com.emergencysupply.rations.ui.theme.CobaltBlue
 import com.emergencysupply.rations.ui.theme.CobaltSoft
 import com.emergencysupply.rations.ui.theme.DangerRed
 import com.emergencysupply.rations.ui.theme.DangerSoft
+import com.emergencysupply.rations.ui.theme.EmeraldVibrant
 import com.emergencysupply.rations.ui.theme.IndigoAccent
 import com.emergencysupply.rations.ui.theme.IndigoSoft
 import com.emergencysupply.rations.ui.theme.InfoBlue
@@ -151,6 +154,43 @@ fun categoryVisualFor(category: String): CategoryVisual {
             CategoryVisual(CobaltBlue, CobaltBlue)
     }
 }
+
+fun locationVisualFor(location: String): CategoryVisual {
+    val lower = location.trim().lowercase()
+    return when {
+        lower.contains("pantry") -> CategoryVisual(EmeraldVibrant, TealSoft)
+        lower.contains("basement") || lower.contains("shelf") -> CategoryVisual(CobaltBlue, CobaltSoft)
+        lower.contains("freezer") || lower.contains("deep") -> CategoryVisual(InfoBlue, InfoSoft)
+        lower.contains("garage") || lower.contains("bin") -> CategoryVisual(OrangeAccent, OrangeSoft)
+        lower.contains("kitchen") || lower.contains("cabinet") -> CategoryVisual(PurpleAccent, PurpleSoft)
+        lower.contains("closet") || lower.contains("hallway") -> CategoryVisual(PinkAccent, PinkSoft)
+        else -> {
+            val fallbackColors = listOf(
+                EmeraldVibrant to TealSoft,
+                CobaltBlue to CobaltSoft,
+                InfoBlue to InfoSoft,
+                OrangeAccent to OrangeSoft,
+                PurpleAccent to PurpleSoft,
+                PinkAccent to PinkSoft,
+                IndigoAccent to IndigoSoft,
+                WarningAmber to WarningSoft
+            )
+            val hash = kotlin.math.abs(location.hashCode())
+            val (tint, soft) = fallbackColors[hash % fallbackColors.size]
+            CategoryVisual(tint, soft)
+        }
+    }
+}
+
+data class WheelColumnSpec(
+    val label: String,
+    val items: List<String>,
+    val selected: String,
+    val weight: Float = 1f,
+    val displayTransform: (String) -> String = { it },
+    val onSelected: (String) -> Unit,
+    val onAddClick: (() -> Unit)? = null
+)
 
 @Composable
 fun ReadinessArcGauge(
@@ -432,7 +472,7 @@ fun ScrollableWheelDatePicker(
                         shape = RoundedCornerShape(10.dp),
                         color = Color.White,
                         shadowElevation = 1.dp,
-                        border = BorderStroke(1.dp, TealPrimary.copy(alpha = 0.25f)),
+                        border = BorderStroke(1.dp, EmeraldVibrant.copy(alpha = 0.28f)),
                         modifier = Modifier
                             .fillMaxWidth()
                             .padding(horizontal = 8.dp)
@@ -487,20 +527,183 @@ fun ScrollableWheelDatePicker(
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
+fun ScrollableMultiWheelPicker(
+    columns: List<WheelColumnSpec>,
+    modifier: Modifier = Modifier,
+    height: Dp = 132.dp,
+    accentColor: Color = EmeraldVibrant
+) {
+    Column(modifier = modifier.fillMaxWidth()) {
+        // Compact column header labels
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 12.dp, vertical = 4.dp),
+            horizontalArrangement = Arrangement.SpaceEvenly,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            columns.forEach { col ->
+                Row(
+                    modifier = Modifier.weight(col.weight),
+                    horizontalArrangement = Arrangement.Center,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = col.label,
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = MediumSlate,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                    if (col.onAddClick != null) {
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Surface(
+                            shape = RoundedCornerShape(8.dp),
+                            color = accentColor.copy(alpha = 0.12f),
+                            modifier = Modifier.clickable { col.onAddClick.invoke() }
+                        ) {
+                            Text(
+                                text = "+ New",
+                                fontSize = 10.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = accentColor,
+                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                            )
+                        }
+                    }
+                }
+            }
+        }
+
+        Spacer(modifier = Modifier.height(4.dp))
+
+        // Vertical drum-wheel box
+        Surface(
+            shape = RoundedCornerShape(16.dp),
+            color = SoftTileSurface,
+            border = BorderStroke(1.dp, BorderSlate),
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(height)
+        ) {
+            Box(
+                modifier = Modifier.fillMaxSize(),
+                contentAlignment = Alignment.Center
+            ) {
+                // Centered white selection band
+                Surface(
+                    shape = RoundedCornerShape(10.dp),
+                    color = Color.White,
+                    shadowElevation = 1.dp,
+                    border = BorderStroke(1.dp, accentColor.copy(alpha = 0.28f)),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 8.dp)
+                        .height(40.dp)
+                ) {}
+
+                // Drum columns
+                Row(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(horizontal = 12.dp),
+                    horizontalArrangement = Arrangement.SpaceEvenly
+                ) {
+                    columns.forEach { col ->
+                        MultiWheelColumn(
+                            col = col,
+                            height = height,
+                            accentColor = accentColor,
+                            modifier = Modifier.weight(col.weight)
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+private fun MultiWheelColumn(
+    col: WheelColumnSpec,
+    height: Dp,
+    accentColor: Color,
+    modifier: Modifier = Modifier
+) {
+    val items by rememberUpdatedState(col.items)
+    val onSelected by rememberUpdatedState(col.onSelected)
+    val selectedIdx = remember(items, col.selected) {
+        val idx = items.indexOf(col.selected)
+        if (idx >= 0) idx else 0
+    }
+
+    val state = rememberLazyListState(initialFirstVisibleItemIndex = selectedIdx)
+    val scope = rememberCoroutineScope()
+
+    LaunchedEffect(col.items, selectedIdx) {
+        if (items.isNotEmpty() && selectedIdx in items.indices) {
+            if (state.firstVisibleItemIndex != selectedIdx) {
+                state.animateScrollToItem(selectedIdx)
+            }
+        }
+    }
+
+    LaunchedEffect(state) {
+        snapshotFlow { state.isScrollInProgress }
+            .distinctUntilChanged()
+            .filter { !it }
+            .collect {
+                val currentItems = items
+                if (currentItems.isNotEmpty()) {
+                    val idx = state.firstVisibleItemIndex.coerceIn(0, currentItems.lastIndex)
+                    val candidate = currentItems[idx]
+                    if (candidate != col.selected) {
+                        onSelected(candidate)
+                    }
+                }
+            }
+    }
+
+    WheelColumn(
+        items = items,
+        state = state,
+        selectedIdx = selectedIdx,
+        onItemClick = { idx ->
+            val currentItems = items
+            if (idx in currentItems.indices) {
+                onSelected(currentItems[idx])
+                scope.launch { state.animateScrollToItem(idx) }
+            }
+        },
+        displayTransform = col.displayTransform,
+        highlightColor = accentColor,
+        height = height,
+        modifier = modifier
+    )
+}
+
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
 private fun WheelColumn(
     items: List<String>,
     state: androidx.compose.foundation.lazy.LazyListState,
     selectedIdx: Int,
     onItemClick: (Int) -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    height: Dp = 132.dp,
+    highlightColor: Color = EmeraldVibrant,
+    displayTransform: (String) -> String = { it }
 ) {
     val flingBehavior = rememberSnapFlingBehavior(lazyListState = state)
+    val verticalPadding = (height - 40.dp).coerceAtLeast(0.dp) / 2
     LazyColumn(
         state = state,
         flingBehavior = flingBehavior,
-        contentPadding = PaddingValues(vertical = 46.dp),
+        contentPadding = PaddingValues(vertical = verticalPadding),
         horizontalAlignment = Alignment.CenterHorizontally,
-        modifier = modifier.height(132.dp)
+        modifier = modifier.height(height)
     ) {
         items(items.size) { index ->
             val isCentered = index == selectedIdx
@@ -512,10 +715,13 @@ private fun WheelColumn(
                 contentAlignment = Alignment.Center
             ) {
                 Text(
-                    text = items[index],
+                    text = displayTransform(items[index]),
                     fontSize = if (isCentered) 15.sp else 13.sp,
                     fontWeight = if (isCentered) FontWeight.ExtraBold else FontWeight.Medium,
-                    color = if (isCentered) TealPrimary else MutedSlate
+                    color = if (isCentered) highlightColor else MutedSlate,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.padding(horizontal = 4.dp)
                 )
             }
         }

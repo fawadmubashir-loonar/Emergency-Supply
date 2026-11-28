@@ -3,7 +3,9 @@ package com.emergencysupply.rations.ui.screens
 import android.content.Intent
 import android.widget.Toast
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -12,15 +14,18 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
@@ -38,13 +43,16 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CheckboxDefaults
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -54,7 +62,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextDecoration
@@ -65,6 +75,8 @@ import com.emergencysupply.rations.data.PreplannedCatalog
 import com.emergencysupply.rations.data.local.entity.GroceryItem
 import com.emergencysupply.rations.data.local.entity.InventoryItem
 import com.emergencysupply.rations.ui.MainViewModel
+import com.emergencysupply.rations.ui.components.ScrollableMultiWheelPicker
+import com.emergencysupply.rations.ui.components.WheelColumnSpec
 import com.emergencysupply.rations.ui.components.categoryVisualFor
 import com.emergencysupply.rations.ui.components.dashedBorder
 import com.emergencysupply.rations.ui.theme.BorderSlate
@@ -102,6 +114,7 @@ data class GrocerySuggestion(
     val icon: String = "📦"
 )
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun GroceriesScreen(viewModel: MainViewModel) {
     val context = LocalContext.current
@@ -116,6 +129,7 @@ fun GroceriesScreen(viewModel: MainViewModel) {
     var newStore by remember { mutableStateOf("Grocery Store") }
     var newAisle by remember { mutableStateOf("General") }
     var cartExpanded by remember { mutableStateOf(true) }
+    var editingGrocery by remember { mutableStateOf<GroceryItem?>(null) }
 
     val storeOptions = PreplannedCatalog.groceryPurposeLists
 
@@ -702,7 +716,8 @@ fun GroceriesScreen(viewModel: MainViewModel) {
                             viewModel.moveGroceryToPantry(item)
                             Toast.makeText(context, "Restocked +%.0f ${item.name} into Pantry!".format(item.qty), Toast.LENGTH_SHORT).show()
                         },
-                        onDelete = { viewModel.deleteGrocery(item.id) }
+                        onDelete = { viewModel.deleteGrocery(item.id) },
+                        onLongClick = { editingGrocery = item }
                     )
                 }
             }
@@ -804,7 +819,8 @@ fun GroceriesScreen(viewModel: MainViewModel) {
                                             viewModel.moveGroceryToPantry(item)
                                             Toast.makeText(context, "Restocked +%.0f ${item.name} into Pantry!".format(item.qty), Toast.LENGTH_SHORT).show()
                                         },
-                                        onDelete = { viewModel.deleteGrocery(item.id) }
+                                        onDelete = { viewModel.deleteGrocery(item.id) },
+                                        onLongClick = { editingGrocery = item }
                                     )
                                 }
                             }
@@ -816,18 +832,45 @@ fun GroceriesScreen(viewModel: MainViewModel) {
 
         item { Spacer(modifier = Modifier.height(16.dp)) }
     }
+
+    editingGrocery?.let { itemToEdit ->
+        GroceryItemEditorSheet(
+            item = itemToEdit,
+            storeOptions = storeOptions,
+            onDismiss = { editingGrocery = null },
+            onSave = { updated ->
+                viewModel.updateGroceryItem(updated)
+                editingGrocery = null
+            },
+            onDelete = {
+                viewModel.deleteGrocery(itemToEdit.id)
+                editingGrocery = null
+            }
+        )
+    }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun ReformedGroceryItemCard(
     item: GroceryItem,
     onToggleChecked: () -> Unit,
     onToggleFavorite: () -> Unit,
     onMoveToPantry: () -> Unit,
-    onDelete: () -> Unit
+    onDelete: () -> Unit,
+    onLongClick: () -> Unit = {}
 ) {
+    val haptic = LocalHapticFeedback.current
     Card(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier
+            .fillMaxWidth()
+            .combinedClickable(
+                onClick = { onToggleChecked() },
+                onLongClick = {
+                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                    onLongClick()
+                }
+            ),
         shape = RoundedCornerShape(16.dp),
         colors = CardDefaults.cardColors(containerColor = if (item.checked) SoftTileSurface else CardSurface),
         elevation = CardDefaults.cardElevation(defaultElevation = if (item.checked) 0.dp else 2.dp)
@@ -854,7 +897,17 @@ fun ReformedGroceryItemCard(
 
             Spacer(modifier = Modifier.width(10.dp))
 
-            Column(modifier = Modifier.weight(1f).clickable { onToggleChecked() }) {
+            Column(
+                modifier = Modifier
+                    .weight(1f)
+                    .combinedClickable(
+                        onClick = { onToggleChecked() },
+                        onLongClick = {
+                            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                            onLongClick()
+                        }
+                    )
+            ) {
                 Text(
                     text = item.name,
                     fontSize = 15.sp,
@@ -899,6 +952,320 @@ fun ReformedGroceryItemCard(
 
             IconButton(onClick = onDelete, modifier = Modifier.size(30.dp)) {
                 Icon(imageVector = Icons.Default.Delete, contentDescription = "Delete", tint = LightSlate, modifier = Modifier.size(18.dp))
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun GroceryItemEditorSheet(
+    item: GroceryItem,
+    storeOptions: List<String>,
+    onDismiss: () -> Unit,
+    onSave: (GroceryItem) -> Unit,
+    onDelete: () -> Unit
+) {
+    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+
+    var name by remember(item.id) { mutableStateOf(item.name) }
+    var isFavorite by remember(item.id) { mutableStateOf(item.favorite) }
+    var confirmDelete by remember(item.id) { mutableStateOf(false) }
+
+    // Qty options: 1..50, preserving exact current integer/value
+    val currentQtyStr = if (item.qty > 0 && item.qty % 1.0 == 0.0) {
+        item.qty.toInt().toString()
+    } else if (item.qty > 0) {
+        "%.1f".format(item.qty)
+    } else {
+        "1"
+    }
+    val qtyList = remember(item.id) {
+        val standard = (1..50).map { it.toString() }
+        if (standard.contains(currentQtyStr)) standard else (listOf(currentQtyStr) + standard).distinct()
+    }
+    var selectedQtyStr by remember(item.id) { mutableStateOf(currentQtyStr) }
+
+    // Unit options: (PreplannedCatalog.standardUnits + item.unit).distinct()
+    val unitOptions = remember(item.id) {
+        (PreplannedCatalog.standardUnits + item.unit).filter { it.isNotBlank() }.distinct()
+    }
+    var selectedUnit by remember(item.id) {
+        mutableStateOf(item.unit.ifBlank { unitOptions.firstOrNull() ?: "packs" })
+    }
+
+    // Store/List options: storeOptions.filter { it != "All Lists" && it != "All Stores" }
+    val filteredStoreOptions = remember(item.id, storeOptions) {
+        val base = storeOptions.filter { it != "All Lists" && it != "All Stores" }
+        if (item.store.isNotBlank() && !base.contains(item.store)) {
+            (listOf(item.store) + base).distinct()
+        } else {
+            base
+        }
+    }
+    var selectedStore by remember(item.id) {
+        mutableStateOf(if (item.store in filteredStoreOptions) item.store else (filteredStoreOptions.firstOrNull() ?: "Grocery Store"))
+    }
+
+    // Aisle options: derived from PreplannedCatalog.aisleForItem common aisles + current item.aisle
+    val commonAisles = remember {
+        listOf(
+            "🛒 General Aisle",
+            "🥩 Halal Meat & Seafood",
+            "🌾 Bulk Grains & Pasta",
+            "🥛 Dairy & Eggs",
+            "🥬 Fresh & Frozen",
+            "🥫 Canned & Dry Goods",
+            "👶 Baby & Kids",
+            "💧 Water & Drinks",
+            "🫒 Oils & Spices",
+            "🧴 Household & First Aid"
+        )
+    }
+    val currentAisle = remember(item.id) {
+        item.aisle.ifBlank { PreplannedCatalog.aisleForItem(item.name, "") }
+    }
+    val aisleOptions = remember(item.id) {
+        (listOf(currentAisle) + commonAisles).filter { it.isNotBlank() }.distinct()
+    }
+    var selectedAisle by remember(item.id) { mutableStateOf(currentAisle) }
+
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        sheetState = sheetState,
+        containerColor = CardSurface,
+        shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp)
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .navigationBarsPadding()
+                .padding(horizontal = 20.dp)
+                .padding(bottom = 24.dp)
+                .verticalScroll(rememberScrollState()),
+            verticalArrangement = Arrangement.spacedBy(14.dp)
+        ) {
+            // Header with item icon + "Edit Grocery Item" + favorite/delete toggles
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    val icon = PreplannedCatalog.iconForItem(name, selectedAisle)
+                    val visual = categoryVisualFor(selectedAisle)
+                    Surface(
+                        shape = RoundedCornerShape(12.dp),
+                        color = visual.tint.copy(alpha = 0.2f),
+                        modifier = Modifier.size(38.dp)
+                    ) {
+                        Box(contentAlignment = Alignment.Center) {
+                            Text(icon, fontSize = 20.sp)
+                        }
+                    }
+                    Spacer(modifier = Modifier.width(10.dp))
+                    Column {
+                        Text(
+                            text = "Edit Grocery Item",
+                            fontWeight = FontWeight.ExtraBold,
+                            fontSize = 19.sp,
+                            color = MidnightSlate
+                        )
+                        Text(
+                            text = "Hold & spin to tweak list details",
+                            fontSize = 11.sp,
+                            color = MediumSlate
+                        )
+                    }
+                }
+
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    IconButton(
+                        onClick = { isFavorite = !isFavorite },
+                        modifier = Modifier.size(36.dp)
+                    ) {
+                        Icon(
+                            imageVector = if (isFavorite) Icons.Default.Star else Icons.Outlined.StarOutline,
+                            contentDescription = "Toggle Favorite",
+                            tint = if (isFavorite) WarningAmber else LightSlate,
+                            modifier = Modifier.size(22.dp)
+                        )
+                    }
+
+                    Surface(
+                        shape = CircleShape,
+                        color = DangerSoft,
+                        modifier = Modifier
+                            .size(36.dp)
+                            .clickable { confirmDelete = !confirmDelete }
+                    ) {
+                        Box(contentAlignment = Alignment.Center) {
+                            Icon(
+                                imageVector = Icons.Default.Delete,
+                                contentDescription = "Delete",
+                                tint = DangerRed,
+                                modifier = Modifier.size(18.dp)
+                            )
+                        }
+                    }
+                }
+            }
+
+            if (confirmDelete) {
+                Surface(
+                    shape = RoundedCornerShape(14.dp),
+                    color = DangerSoft,
+                    border = BorderStroke(1.dp, DangerRed.copy(alpha = 0.3f)),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Column(modifier = Modifier.padding(14.dp)) {
+                        Text(
+                            text = "Remove '${item.name}' from list?",
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = DangerRed
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Button(
+                                onClick = onDelete,
+                                colors = ButtonDefaults.buttonColors(containerColor = DangerRed),
+                                shape = RoundedCornerShape(10.dp)
+                            ) {
+                                Text("Delete Item", fontSize = 12.sp, color = Color.White)
+                            }
+                            OutlinedButton(
+                                onClick = { confirmDelete = false },
+                                shape = RoundedCornerShape(10.dp)
+                            ) {
+                                Text("Cancel", fontSize = 12.sp, color = DarkSlate)
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Item Name OutlinedTextField
+            OutlinedTextField(
+                value = name,
+                onValueChange = { name = it },
+                label = { Text("Item Name") },
+                singleLine = true,
+                shape = RoundedCornerShape(14.dp),
+                modifier = Modifier.fillMaxWidth(),
+                colors = OutlinedTextFieldDefaults.colors(
+                    focusedBorderColor = EmeraldVibrant,
+                    unfocusedBorderColor = BorderSlate,
+                    focusedContainerColor = Color.White,
+                    unfocusedContainerColor = SoftTileSurface
+                )
+            )
+
+            // ScrollableMultiWheelPicker for Qty and Unit
+            Surface(
+                shape = RoundedCornerShape(16.dp),
+                color = SoftTileSurface,
+                border = BorderStroke(1.dp, BorderSlate),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(modifier = Modifier.padding(10.dp)) {
+                    Text(
+                        text = "QUANTITY & UNIT",
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = MediumSlate,
+                        modifier = Modifier.padding(start = 4.dp, bottom = 4.dp)
+                    )
+                    ScrollableMultiWheelPicker(
+                        columns = listOf(
+                            WheelColumnSpec(
+                                label = "Quantity",
+                                items = qtyList,
+                                selected = selectedQtyStr,
+                                weight = 1f,
+                                onSelected = { selectedQtyStr = it }
+                            ),
+                            WheelColumnSpec(
+                                label = "Unit",
+                                items = unitOptions,
+                                selected = selectedUnit,
+                                weight = 1.2f,
+                                onSelected = { selectedUnit = it }
+                            )
+                        ),
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+            }
+
+            // ScrollableMultiWheelPicker for Store/List and Aisle
+            Surface(
+                shape = RoundedCornerShape(16.dp),
+                color = SoftTileSurface,
+                border = BorderStroke(1.dp, BorderSlate),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(modifier = Modifier.padding(10.dp)) {
+                    Text(
+                        text = "PURPOSE LIST & AISLE",
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = MediumSlate,
+                        modifier = Modifier.padding(start = 4.dp, bottom = 4.dp)
+                    )
+                    ScrollableMultiWheelPicker(
+                        columns = listOf(
+                            WheelColumnSpec(
+                                label = "Store / List",
+                                items = filteredStoreOptions,
+                                selected = selectedStore,
+                                weight = 1.2f,
+                                onSelected = { selectedStore = it }
+                            ),
+                            WheelColumnSpec(
+                                label = "Aisle",
+                                items = aisleOptions,
+                                selected = selectedAisle,
+                                weight = 1.6f,
+                                onSelected = { selectedAisle = it }
+                            )
+                        ),
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(4.dp))
+
+            // InkBlack "Save & Sync" capsule button
+            Button(
+                onClick = {
+                    val parsedQty = selectedQtyStr.toDoubleOrNull() ?: item.qty
+                    val updated = item.copy(
+                        name = name.trim().ifBlank { item.name },
+                        qty = parsedQty,
+                        unit = selectedUnit,
+                        store = selectedStore,
+                        aisle = selectedAisle,
+                        favorite = isFavorite
+                    )
+                    onSave(updated)
+                },
+                shape = RoundedCornerShape(24.dp),
+                colors = ButtonDefaults.buttonColors(containerColor = InkBlack),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(48.dp)
+            ) {
+                Text(
+                    text = "Save & Sync",
+                    fontSize = 15.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = Color.White
+                )
             }
         }
     }
