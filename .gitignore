@@ -11,3 +11,6 @@
 *.jks
 *.keystore
 rations-release.jks
+.pandacode/
+*.apk
+

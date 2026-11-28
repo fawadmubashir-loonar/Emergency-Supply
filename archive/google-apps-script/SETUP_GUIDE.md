@@ -19,7 +19,7 @@ This takes about **3 minutes** and you only have to do it once. When you're done
 
 1. You'll already see a file open called **`Code.gs`** with a few starter lines inside.
 2. Click inside that text area, select everything (**`Cmd + A`**), and press **Delete** so it's completely empty.
-3. Copy all the text from **`google-apps-script/Code.gs`** (or click the button on the **1-click Copy Helper** page) and paste it in (**`Cmd + V`**).
+3. Copy all the text from **`archive/google-apps-script/Code.gs`** (or click the button on the **1-click Copy Helper** page) and paste it in (**`Cmd + V`**).
 4. Click the **Save** icon (the floppy disk at the top) or press **`Cmd + S`**.
 
 ---
@@ -30,7 +30,7 @@ This takes about **3 minutes** and you only have to do it once. When you're done
 2. Type **`Index`** and press **Enter**.
    - *Important:* Use a capital **`I`** and exact spelling (`Index`). Google automatically adds `.html` for you so it becomes `Index.html`.
 3. Click inside the new `Index.html` file, select all the starter lines (**`Cmd + A`**), and press **Delete**.
-4. Copy all the text from **`google-apps-script/Index.html`** (or use the **1-click Copy Helper** page) and paste it in (**`Cmd + V`**).
+4. Copy all the text from **`archive/google-apps-script/Index.html`** (or use the **1-click Copy Helper** page) and paste it in (**`Cmd + V`**).
 5. Click the **Save** icon or press **`Cmd + S`**.
 
 ---
